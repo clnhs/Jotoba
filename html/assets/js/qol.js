@@ -11,7 +11,7 @@ $('a').mousedown((event) => {
 
 $(document).on('keyup keydown keypress', function(e){ shiftPressed = e.shiftKey} );
 
-// Key Events, or how I like to call 'em: The Jojii-Only events
+// Key Events for easy usability
 $(document).on("keypress", (event) => {
     if ($('input:text').is(":focus")) return;
     
@@ -52,14 +52,14 @@ $(document).on("keypress", (event) => {
 });
 
 // Copies Furigana to clipboard on click
-$('.furigana-kanji-container > .furigana-preview').on("click", (event) => {
+$('.furigana-preview').on("click", (event) => {
     preventDefaultHighlight(event, 100, true, false);
     Util.showMessage("success", "furigana copied to clipboard.");
     Util.copyToClipboard($(event.target).html().trim());
 });
 
 // Copies full Furigana to clipboard on dblclick
-$('.furigana-kanji-container > .furigana-preview').on("dblclick", (event) => {
+$('.furigana-preview').on("dblclick", (event) => {
     // Disable Events for a short time
     preventDefaultHighlight(event, 100, false);
 
@@ -77,7 +77,7 @@ $('.furigana-kanji-container > .furigana-preview').on("dblclick", (event) => {
     });
 
 // Copies translations to clipboard on double click
-$('.furigana-kanji-container > .kanji-preview').on("dblclick", (event) => {
+$('.kanji-preview').on("dblclick", (event) => {
     preventDefaultHighlight(event, 500, false);
     copyTranslationAndShowMessage(event.target.parentElement.parentElement);
 });
@@ -119,38 +119,21 @@ function startEventTimeout(targetElement, durationMs, disableClick = true, disab
 
 // Used by kanji/kana copy to combine all parts, starts from the flex (parent)
 function copyTranslationAndShowMessage(textParent) {
-    // Find all childs that are of interest
-    let fullTranslation = "";
+    let fullContent = "";
     let onlyKanji = true;
-    textParent.childNodes.forEach((entry) => {
-        if (entry.classList != undefined) {
-            // Kanji
-            if (entry.classList.contains("furigana-kanji-container")) {
-                entry.childNodes.forEach((subEntry) => {
-                    if (subEntry.classList != undefined && subEntry.classList.contains("kanji-preview")) {
-                        let text = subEntry.innerHTML.trim();
-                        fullTranslation += text;
-                        if (text.charCodeAt(0) < 19968)
-                            onlyKanji = false;
-                    }
-                });
-            }
-            // Kana
-            if (entry.classList.contains("inline-kana-preview")) {
-                let text = entry.innerHTML.trim();
-                fullTranslation += text;
-                if (text.charCodeAt(0) < 19968)
-                    onlyKanji = false;
-            }
-        } 
+
+    // Find all childs that are of interest
+    $(textParent).find('.kanji-preview, .inline-kana-preview').each((i, element) => {
+        let txt = element.innerHTML.trim();
+        fullContent += txt
+        if (txt.charCodeAt(0) < 19968) {
+            onlyKanji = false;
+        }
     });
-    Util.copyToClipboard(fullTranslation);
-	
-	if (onlyKanji) {
-		Util.showMessage("success", "kanji copied to clipboard.");
-	} else {
-		Util.showMessage("success", "meaning copied to clipboard.");
-	}
+
+    // Copy and visual feedback
+    Util.copyToClipboard(fullContent);
+    Util.showMessage("success", onlyKanji ? "kanji copied to clipboard." : "meaning copied to clipboard.");
 }
 
 // Changes the search type in the upper row depending on the users input
@@ -161,9 +144,9 @@ function changeSearchType(html, newType) {
     }
 }
 
-// Focus Search Bar on load if the user wants it to
+// Focus Search Bar on load if the user wants it to (or on index page)
 Util.awaitDocumentReady(() => {
-    if (Util.toBoolean(Cookies.get("focus_searchbar"))) {
+    if (Util.toBoolean(Cookies.get("focus_searchbar")) || document.location.href.slice(0, -1) == document.location.origin) {
         preventNextApiCall = true;
         $('#search').focus();
         Util.setCaretPosition("search", -1);
@@ -199,9 +182,6 @@ Util.awaitDocumentReady(() => {
     // Install the serviceWorker for PWA
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/service-worker.js')
-        .then(function(registration) {
-          console.log('Registration successful, scope is:', registration.scope);
-        })
         .catch(function(error) {
           console.log('Service worker registration failed, error:', error);
         });
