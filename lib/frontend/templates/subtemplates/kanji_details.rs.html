@@ -129,10 +129,10 @@
          @if k_item.kanji.has_stroke_frames() {
            <hr/>
            <div class="stroke-container">
-                <img src="@k_item.kanji.get_stroke_frames_url()">
+              <object data="@k_item.kanji.get_stroke_frames_url()" type="image/svg+xml"></object>
            </div>
          }
-        
+
          @if k_item.kanji.has_animation_file() {
          
           <div class="animation-container d-flex flex-row">
@@ -142,7 +142,7 @@
                  </div>
                  <span class="slider-output noselect currentAnimationSpeed">@data.gettext_fmt("Animation speed: {}", &[1])</span>
               </div>
-              <div class="kanjisvgParent">
+              <div class="kanjisvgParent umami--click--kanji-replay">
                 <svg class="kanjisvg" width="109px" height="109px">
                 @for (del, d) in k_item.get_animation_entries() {
                   <path style="animation-delay: @del;" class="draw2" stroke-linejoin="round" stroke="black" fill="none" stroke-width="5" d="@d">
@@ -153,13 +153,26 @@
            </div>
           }
         
-          <div>
-            <hr class="compounds-dropdown"/>
-            <div class="compounds-click-area" onclick="toggleCompounds(event)"></div>
-          </div>
+          @if k_item.kanji.has_compounds() {
+            <div>
+              @if data.kanji_copounds_collapsed() {
+                <hr class="compounds-dropdown closed"/>
+              }else{
+                <hr class="compounds-dropdown"/>
+              }
+              <div class="compounds-click-area" onclick="toggleCompounds(event)"></div>
+            </div>
+          }else{
+            <hr/>
+          }
 
-         <!-- Reading Compounds -->
-         <div class="compounds-parent d-flex flex-row">
+            <!-- Reading Compounds -->
+            @if data.kanji_copounds_collapsed() {
+             <div class="compounds-parent d-flex flex-row hidden">
+            }else{
+             <div class="compounds-parent d-flex flex-row">
+            }
+
             <!-- On Reading -->
             @if let Some(ref ons) = k_item.on_dicts {
               <div class="on-reading">

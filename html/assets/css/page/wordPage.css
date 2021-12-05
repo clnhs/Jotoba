@@ -55,6 +55,10 @@
     padding-left: 1vw;
 }
 
+.definition-wrapper {
+    max-width: 93%;
+}
+
 /* Example Sentences */
 .example-sentence {
     padding-top: 5px;
@@ -101,6 +105,8 @@
 
 .tags .furigana-preview {
     font-size: 10px;
+    margin-bottom: 5px;
+    margin-top: 2px;
 }
 
 .tags .inline-kana-preview {
@@ -130,6 +136,14 @@
 
 .dot-menu {
     width: 100%;
+}
+
+.mdl-menu__item:last-child[disabled], .mdl-menu__item:first-child[disabled] {
+    display: none;
+}
+
+.mdl-menu__item[disabled] + .mdl-menu__item[disabled] {
+    display: none;
 }
 
 #info-dropdown {
@@ -264,6 +278,7 @@ thead > tr > th {
 }
 
 table th {
+    padding: 0.75rem;
     border-color: var(--searchTextColor) !important;
     border-bottom: 2px solid var(--lineColor) !important;
     border-top: 1px solid var(--lineColor) !important;

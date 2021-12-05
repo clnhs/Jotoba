@@ -1,9 +1,13 @@
 /*
-    Used to make mobile shit ~p~r~e~t~t~y~ less ugly
+    Used to make mobile stuff less ugly. Will be transfered into the others file bit-by-bit.
 */
 
 @media only screen and (max-width: 600px) {
 	
+    .modal-open {
+        margin-right: 0px;
+    }
+
     /* -------- Index -------- */
    
     .circle {
@@ -82,41 +86,11 @@
         width: 100%;
     }
 
-    .search-annotation {
-        width: 80%;
-        margin-left: 10%;
-        padding-left: 0px;
-        padding-right: 0px;
-    }
-
     #shadow-text {
         padding: 0px;
         margin: 13px 15px;
     }
 	
-    .main-container {
-        width: 98vw;
-    }
-
-    .sentence-reader {
-        overflow-x: scroll;
-        max-width: 90vw !important;
-        padding-top: 20px;
-        flex-wrap: unset !important;
-    }
-
-    .sentence-reader::-webkit-scrollbar {
-        width: 0px;
-    }
-
-    .sentence-part {
-        min-width: -webkit-max-content;
-        min-width: -moz-max-content;
-        min-width: max-content;
-        margin-right: 20px;
-    }
-    
-
     #content-container {
         flex-direction: column!important;
     }

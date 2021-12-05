@@ -6,7 +6,7 @@
 const hashtags = [
     "#adverb", "#auxilary", "#conjungation", "#noun", "#prefix", "#suffix", "#particle", "#sfx",
     "#verb", "#adjective", "#counter", "#expression", "#interjection", "#pronoun", "#numeric", "#transitive", "#intransitive",
-    "#unclassified", "#word", "#sentence", "#name", "#kanji", "#abbreviation", "#N5", "#N4", "#N3", "#N2", "#N1"
+    "#unclassified", "#word", "#sentence", "#name", "#kanji", "#abbreviation", "#N5", "#N4", "#N3", "#N2", "#N1", "#hidden"
 ];
 
 // Elements used
@@ -20,8 +20,8 @@ const kanjiRegEx = '([一-龯|々|𥝱|𩺊])';
 
 // Global variables used
 var currentSuggestion = "";
-var currentSuggestionType = "default";
-var currentSuggestionIndex = 0;
+var currentSuggestionType = "default"; // default || kanji_reading || hashtag
+var currentSuggestionIndex = 0; // 0 => nothing
 var availableSuggestions = 0;
 var keepSuggestions = false;
 var oldInputValue = "";
@@ -180,7 +180,8 @@ function getHashtagData(currentText) {
     }
 
     let resultJSON =  {
-        "suggestions": suggestions
+        "suggestions": suggestions,
+        "suggestion_type": "hashtag"
     }
 
     loadSuggestionApiData(resultJSON);
@@ -216,4 +217,12 @@ function closeAllSubSearchbarOverlays(overlayToIgnore) {
         $('.overlay.radical').addClass('hidden');
     if (overlayToIgnore !== "image")
         $('.overlay.image').addClass('hidden');
+}
+
+// Opens the Help Page
+function openHelpPage() {
+    document.getElementsByClassName("infoBtn")[0].classList.remove("new");
+    if (localStorage != null)
+        localStorage.setItem("first_time", "false");
+    Util.loadUrl("/help");
 }

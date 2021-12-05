@@ -4,7 +4,6 @@ use std::{
     fmt::Debug,
     hash::Hash,
     ops::Index,
-    time::Instant,
     vec::IntoIter,
 };
 
@@ -36,7 +35,7 @@ impl<T: PartialEq + Debug> Debug for SearchResult<T> {
     }
 }
 
-impl<T: PartialEq + Hash + Clone> SearchResult<T> {
+impl<T: PartialEq + Hash + Clone + Eq> SearchResult<T> {
     /// Returns a `SearchResult` from a BinaryHeap
     pub(crate) fn from_binary_heap(
         mut heap: BinaryHeap<ResultItem<T>>,
@@ -81,27 +80,31 @@ impl<T: PartialEq + Hash + Clone> SearchResult<T> {
     }
 
     pub fn merge(&mut self, other: Self) {
-        let start = Instant::now();
-        merge_sorted_list(&mut self.items, other.items);
-        println!("merging took: {:?}", start.elapsed());
+        self.total_items += merge_sorted_list(&mut self.items, other.items);
     }
 }
 
 /// Merges two sorted sequences `other` and `src` and stores result into `src`. Ignores duplicates.
-fn merge_sorted_list<T: PartialEq + Clone + Hash>(
+fn merge_sorted_list<T: PartialEq + Clone + Hash + Eq>(
     src: &mut Vec<ResultItem<T>>,
     other: Vec<ResultItem<T>>,
-) {
-    let mut hash_set = HashSet::with_capacity(src.len() + other.len());
-    hash_set.extend(src.clone());
-    hash_set.extend(other.clone());
+) -> usize {
+    let mut add_cnt = 0;
 
-    // TODO: maybe make this O(n) since both sets are already sorted
-    src.truncate(0);
-    src.extend(hash_set);
+    // Use a hashset to be able to look up whether an element from `other` is already in `src` the
+    // fastest way possible
+    let hash_set = HashSet::<T>::from_iter(src.clone().into_iter().map(|i| i.item));
 
-    src.sort_unstable_by(|a, b| a.cmp(&b).reverse());
-    src.dedup_by(|a, b| a.item.eq(&b.item));
+    for i in other {
+        if !hash_set.contains(&i.item) {
+            add_cnt += 1;
+            src.push(i);
+        }
+    }
+
+    // We might have changed the ordering
+    src.sort_by(|a, b| a.cmp(&b).reverse());
+    add_cnt
 }
 
 impl<T: PartialEq> IntoIterator for SearchResult<T> {

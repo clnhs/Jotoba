@@ -32,6 +32,7 @@ pub struct ServerConfig {
     pub img_upload_dir: Option<String>,
     pub tess_data: Option<String>,
     pub news_folder: Option<String>,
+    pub debug_mode: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -74,7 +75,7 @@ impl Config {
     pub fn get_indexes_source(&self) -> &str {
         self.search
             .as_ref()
-            .and_then(|i| i.indexes_source.as_ref().map(|i| i.as_str()))
+            .and_then(|i| i.indexes_source.as_deref())
             .unwrap_or("./indexes")
     }
 
@@ -82,7 +83,7 @@ impl Config {
     pub fn get_suggestion_sources(&self) -> &str {
         self.search
             .as_ref()
-            .and_then(|i| i.suggestion_sources.as_ref().map(|i| i.as_str()))
+            .and_then(|i| i.suggestion_sources.as_deref())
             .unwrap_or("./suggestions")
     }
 
@@ -103,7 +104,7 @@ impl Config {
             .storage_data
             .as_ref()
             .cloned()
-            .unwrap_or(ServerConfig::default().storage_data.unwrap())
+            .unwrap_or_else(|| ServerConfig::default().storage_data.unwrap())
     }
 
     /// Returns the configured (or default) path for the sentences resource file
@@ -112,7 +113,7 @@ impl Config {
             .sentences
             .as_ref()
             .cloned()
-            .unwrap_or(ServerConfig::default().sentences.unwrap())
+            .unwrap_or_else(|| ServerConfig::default().sentences.unwrap())
     }
 
     /// Returns the configured (or default) path for the radical map
@@ -121,7 +122,7 @@ impl Config {
             .radical_map
             .as_ref()
             .cloned()
-            .unwrap_or(ServerConfig::default().radical_map.unwrap())
+            .unwrap_or_else(|| ServerConfig::default().radical_map.unwrap())
     }
 
     /// Returns the configured (or default) path for the radical map
@@ -130,7 +131,12 @@ impl Config {
             .img_upload_dir
             .as_ref()
             .cloned()
-            .unwrap_or(ServerConfig::default().img_upload_dir.unwrap())
+            .unwrap_or_else(|| ServerConfig::default().img_upload_dir.unwrap())
+    }
+
+    /// Returns `true` if system is in debug mode
+    pub fn is_debug(&self) -> bool {
+        self.server.debug_mode.unwrap_or(false)
     }
 }
 
@@ -147,6 +153,7 @@ impl Default for ServerConfig {
             img_upload_dir: Some(String::from("./img_scan_tmp")),
             tess_data: None,
             news_folder: Some(String::from("./news")),
+            debug_mode: Some(false),
         }
     }
 }
@@ -171,9 +178,13 @@ impl ServerConfig {
 
 impl Config {
     /// Create a new config object
-    pub fn new() -> Result<Self, String> {
-        let config_file = std::env::var("JOTOBA_CONFIG")
-            .map(|i| Path::new(&i).to_owned())
+    pub fn new(src: Option<PathBuf>) -> Result<Self, String> {
+        let config_file = src
+            .or_else(|| {
+                std::env::var("JOTOBA_CONFIG")
+                    .map(|i| Path::new(&i).to_owned())
+                    .ok()
+            })
             .unwrap_or(Self::get_config_file()?);
 
         let mut config = if !config_file.exists()
@@ -208,7 +219,7 @@ impl Config {
 
         let s = toml::to_string_pretty(&self).map_err(|e| e.to_string())?;
         let mut f = File::create(&config_file).map_err(|e| e.to_string())?;
-        f.write_all(&s.as_bytes()).map_err(|e| e.to_string())?;
+        f.write_all(s.as_bytes()).map_err(|e| e.to_string())?;
 
         Ok(self)
     }
@@ -260,12 +271,7 @@ fn dir_content(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 
     visit_dirs(path, &mut files)?;
 
-    let out = files
-        .into_iter()
-        .map(|i| i.path().clone())
-        .collect::<Vec<_>>();
-
-    Ok(out)
+    Ok(files.into_iter().map(|i| i.path()).collect::<Vec<_>>())
 }
 
 fn visit_dirs(dir: &Path, out: &mut Vec<DirEntry>) -> std::io::Result<()> {

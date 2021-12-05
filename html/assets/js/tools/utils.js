@@ -2,6 +2,9 @@
  * This JS-File contains some functions that are commonly used
  */
 
+// Constants
+const dateSettings = { year: 'numeric', month: 'short', day: 'numeric' };
+
 // The util "parent"
 function Util () {};
 
@@ -39,6 +42,12 @@ Util.loadScript = function(url, async, attributes, callback) {
     document.head.appendChild(s);
 }
 
+// Re-Encodes a decoded HTML
+Util.decodeHtml = function(html) {
+  var doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.documentElement.textContent;
+}
+
 // Changes the state of an MDL checkbox
 Util.setMdlCheckboxState = function(id, state) {
   if (state === undefined) {
@@ -55,4 +64,14 @@ Util.setMdlCheckboxState = function(id, state) {
       element[0].MaterialCheckbox.uncheck();
     }
   }
+}
+
+// Parses the given Unix time to a date of the given language
+Util.toLocaleDateString = function(unixTime) {
+  return new Date(unixTime).toLocaleDateString("de-DE", dateSettings);
+}   
+
+// Returns whether the current page is index or not
+Util.isIndexPage = function() {
+  return window.location.origin+"/" == document.location.href;
 }

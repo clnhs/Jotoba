@@ -3,11 +3,11 @@ pub mod order;
 pub mod result;
 pub mod tag_only;
 
-use std::time::Instant;
-
 use crate::{
     engine::{
+        self,
         guess::Guess,
+        result::SearchResult,
         words::{foreign, native},
         SearchTask,
     },
@@ -31,14 +31,14 @@ use result::Item;
 use japanese::jp_parsing::{InputTextParser, ParseResult, WordItem};
 use utils::to_option;
 
-pub(self) struct Search<'a> {
+pub struct Search<'a> {
     query: &'a Query,
 }
 
 /// Search among all data based on the input query
 #[inline]
 pub fn search(query: &Query) -> Result<WordResult, Error> {
-    Ok(Search { query }.do_search()?)
+    Search { query }.do_search()
 }
 
 #[derive(Default)]
@@ -54,7 +54,6 @@ pub(crate) struct ResultData {
 impl<'a> Search<'a> {
     /// Do the search
     fn do_search(&self) -> Result<WordResult, Error> {
-        let start = Instant::now();
         let search_result = match self.query.form {
             Form::KanjiReading(_) => kanji::by_reading(self)?,
             Form::TagOnly => tag_only::search(self)?,
@@ -66,7 +65,7 @@ impl<'a> Search<'a> {
         let kanji_results = kanji::load_word_kanji_info(&words)?;
 
         let res = WordResult {
-            contains_kanji: kanji_results.len() > 0,
+            contains_kanji: !kanji_results.is_empty(),
             items: Self::merge_words_with_kanji(words, kanji_results),
             inflection_info: search_result.infl_info,
             count: search_result.count,
@@ -74,7 +73,6 @@ impl<'a> Search<'a> {
             sentence_index: search_result.sentence_index,
             searched_query: search_result.searched_query,
         };
-        println!("search took: {:?}", start.elapsed());
         Ok(res)
     }
 
@@ -88,6 +86,8 @@ impl<'a> Search<'a> {
             .map(|i| Some(i))
             .unwrap_or(gloss_word_res.sentence_parts);
 
+        let infl_info = native_word_res.infl_info.or(gloss_word_res.infl_info);
+
         // Chain native and word results into one vector
         Ok(ResultData {
             words: native_word_res
@@ -95,7 +95,7 @@ impl<'a> Search<'a> {
                 .into_iter()
                 .chain(gloss_word_res.words)
                 .collect_vec(),
-            infl_info: native_word_res.infl_info,
+            infl_info,
             count: native_word_res.count + gloss_word_res.count,
             sentence_parts,
             sentence_index: self.query.word_index as i32,
@@ -129,7 +129,7 @@ impl<'a> Search<'a> {
 
             let index = self.query.word_index.clamp(0, parsed.items.len() - 1);
             let res = parsed.items[index].clone();
-            let sentence = Self::format_setence_parts(self, parsed);
+            let sentence = Self::format_setence_parts(parsed);
 
             Ok((res.get_lexeme().to_string(), Some(res), sentence))
         } else {
@@ -137,7 +137,7 @@ impl<'a> Search<'a> {
         }
     }
 
-    fn format_setence_parts(&self, parsed: ParseResult<'static, 'a>) -> Option<Vec<SentencePart>> {
+    pub fn format_setence_parts(parsed: ParseResult<'static, 'a>) -> Option<Vec<SentencePart>> {
         if parsed.items.len() == 1 {
             return None;
         }
@@ -202,10 +202,20 @@ impl<'a> Search<'a> {
         search_task
     }
 
-    /// Perform a native word search
-    fn native_results(&self, query_str: &str) -> Result<ResultData, Error> {
+    fn native_search(
+        &self,
+        query_str: &str,
+    ) -> Result<
+        (
+            SearchResult<&'static Word>,
+            Option<InflectionInformation>,
+            Option<Vec<SentencePart>>,
+            String,
+        ),
+        Error,
+    > {
         if self.query.language != QueryLang::Japanese && !query_str.is_japanese() {
-            return Ok(ResultData::default());
+            return Err(Error::NotFound);
         }
 
         let (query, morpheme, sentence) = self.get_query(query_str)?;
@@ -219,6 +229,22 @@ impl<'a> Search<'a> {
         }
 
         let res = search_task.find()?;
+        let infl_info = inflection_info(&morpheme);
+        let searched_query = morpheme.map(|i| i.original_word).unwrap_or(query);
+
+        Ok((res, infl_info, sentence, searched_query))
+    }
+
+    /// Perform a native word search
+    fn native_results(&self, query_str: &str) -> Result<ResultData, Error> {
+        let (res, infl_info, sentence, searched_query) = match self.native_search(query_str) {
+            Ok(v) => v,
+            Err(err) => match err {
+                Error::NotFound => return Ok(ResultData::default()),
+                _ => return Err(err),
+            },
+        };
+
         let count = res.len();
 
         let mut wordresults = res.item_iter().cloned().collect::<Vec<_>>();
@@ -229,12 +255,6 @@ impl<'a> Search<'a> {
             self.query.settings.show_english,
         );
 
-        let infl_info = inflection_info(&morpheme);
-
-        let searched_query = morpheme
-            .map(|i| i.original_word.to_owned())
-            .unwrap_or(query);
-
         Ok(ResultData {
             count,
             words: wordresults,
@@ -242,6 +262,7 @@ impl<'a> Search<'a> {
             sentence_parts: sentence,
             sentence_index: self.query.word_index as i32,
             searched_query,
+            ..Default::default()
         })
     }
 
@@ -249,12 +270,16 @@ impl<'a> Search<'a> {
     /// the search
     fn gloss_search_task(&self) -> SearchTask<foreign::Engine> {
         let mut search_task: SearchTask<foreign::Engine> =
-            SearchTask::with_language(&self.query.query, self.query.settings.user_lang)
+            SearchTask::with_language(&self.query.query, self.query.get_lang_with_override())
                 .limit(self.query.settings.page_size as usize)
                 .offset(self.query.page_offset)
                 .threshold(0.3f32);
 
-        if self.query.settings.show_english && self.query.settings.user_lang != Language::English {
+        if self.query.settings.show_english
+            && self.query.settings.user_lang != Language::English
+            // Don't show english results if user wants to search in a specified language
+            && self.query.language_override.is_none()
+        {
             search_task.add_language_query(&self.query.query, Language::English);
         }
 
@@ -264,7 +289,7 @@ impl<'a> Search<'a> {
         search_task.set_result_filter(move |word| Self::word_filter(&q_cloned, word, &pos_filter));
 
         // Set order function
-        let user_lang = self.query.settings.user_lang;
+        let user_lang = self.query.get_lang_with_override();
         search_task.set_order_fn(move |word, relevance, query, language| {
             order::foreign_search_order(word, relevance, query, language.unwrap(), user_lang)
         });
@@ -287,28 +312,60 @@ impl<'a> Search<'a> {
         let mut res = search_task.find()?;
         let count = res.len();
 
+        let mut infl_info = None;
+        let mut sentence = None;
+        let mut searched_query = self.query.query.clone();
         if !self.query.use_original
             && count < 50
             && japanese::guessing::could_be_romaji(&self.query.query)
         {
             let hg_query = self.query.query.to_hiragana();
-            let native_search_task = self.native_search_task(&hg_query, &hg_query, false);
-            res.merge(native_search_task.find()?);
+            let hg_search = self.native_search(&hg_query);
+            if let Ok((native_res, inflection_info, sent, sq)) = hg_search {
+                infl_info = inflection_info;
+                sentence = sent;
+                searched_query = sq;
+                res.merge(native_res);
+            }
+        }
+
+        // If there aren't any results, check if there is another language
+        if res.len() == 0 {
+            return self.check_other_lang();
         }
 
         let mut wordresults = res.item_iter().cloned().collect::<Vec<_>>();
 
         filter_languages(
             wordresults.iter_mut(),
-            self.query.settings.user_lang,
+            self.query.get_lang_with_override(),
             self.query.settings.show_english,
         );
 
         Ok(ResultData {
             count,
             words: wordresults,
+            infl_info,
+            sentence_parts: sentence,
+            sentence_index: self.query.word_index as i32,
+            searched_query,
             ..Default::default()
         })
+    }
+
+    fn check_other_lang(&self) -> Result<ResultData, Error> {
+        let guessed_langs = engine::words::foreign::guess_language(&self.query.query)
+            .into_iter()
+            .filter(|i| *i != self.query.get_lang_with_override())
+            .collect::<Vec<_>>();
+
+        if guessed_langs.len() == 1 {
+            let mut new_query = self.query.clone();
+            new_query.language_override = Some(guessed_langs[0]);
+            return Search { query: &new_query }.gloss_results();
+        }
+
+        Ok(ResultData::default())
     }
 
     fn get_pos_filter(&self, is_sentence: bool) -> Option<Vec<PosSimple>> {
@@ -384,7 +441,14 @@ fn furigana_by_reading(morpheme: &str) -> Option<String> {
     }
 
     let word = word_storage.by_sequence(found[0].item.sequence as u32)?;
-    word.furigana.as_ref().map(|i| i.clone())
+    word.furigana.as_ref().cloned()
+}
+
+pub fn guess_inp_language(query: &Query) -> Vec<Language> {
+    engine::words::foreign::guess_language(&query.query)
+        .into_iter()
+        .filter(|i| *i != query.get_lang_with_override())
+        .collect()
 }
 
 /// Guesses the amount of results a search would return with given `query`

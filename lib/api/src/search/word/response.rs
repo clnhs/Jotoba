@@ -24,6 +24,14 @@ pub struct Word {
     alt_readings: Option<Vec<Reading>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     audio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pitch: Option<Vec<PitchItem>>,
+}
+
+#[derive(Serialize)]
+pub struct PitchItem {
+    part: String,
+    high: bool,
 }
 
 #[derive(Serialize)]
@@ -70,10 +78,10 @@ impl From<&resources::models::words::Sense> for Sense {
             language: sense.language,
             dialect: sense.dialect,
             field: sense.field,
-            information: sense.information.as_ref().map(|i| i.clone()),
-            antonym: sense.antonym.as_ref().map(|i| i.clone()),
+            information: sense.information.as_ref().cloned(),
+            antonym: sense.antonym.as_ref().cloned(),
             misc: sense.misc,
-            xref: sense.xref.as_ref().map(|i| i.clone()),
+            xref: sense.xref.as_ref().cloned(),
         }
     }
 }
@@ -86,6 +94,11 @@ impl From<&resources::models::words::Word> for Word {
         let furigana = word.furigana.clone();
 
         let senses = word.senses.iter().map(|i| Sense::from(i)).collect();
+
+        let pitch = word.accents.as_ref().and_then(|accents| {
+            japanese::accent::calc_pitch(&word.reading.kana.reading, accents[0] as i32)
+                .map(|i| i.into_iter().map(|j| j.into()).collect::<Vec<PitchItem>>())
+        });
 
         Self {
             common: word.is_common(),
@@ -100,6 +113,7 @@ impl From<&resources::models::words::Word> for Word {
                 .audio_file("mp3")
                 .as_ref()
                 .map(|i| format!("/audio/{}", i)),
+            pitch,
         }
     }
 }
@@ -134,4 +148,14 @@ fn convert_words(wres: &WordResult) -> Vec<Word> {
             _ => None,
         })
         .collect()
+}
+
+impl From<(&str, bool)> for PitchItem {
+    #[inline]
+    fn from((part, high): (&str, bool)) -> Self {
+        Self {
+            part: part.to_owned(),
+            high,
+        }
+    }
 }

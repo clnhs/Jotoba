@@ -2,6 +2,11 @@
  * This JS-File implements the Kanji Animation and compound dropdown feature
  */
 
+const svgColorScheme = [
+    ["rgb(0, 0, 0)", "rgb(153, 153, 153)", "rgb(221, 221, 221)", "rgb(52, 168, 60)", "0.7"], // light
+    ["rgb(211, 207, 201)", "rgb(105, 105, 105)","rgb(92, 92, 92)", "rgb(95, 241, 96)", "0.75"]  // dark
+]
+
 // Restarts the animation of the kanji strokes
 function restartAnimation(target, delayMultiplier) {
     if (delayMultiplier == undefined)
@@ -42,7 +47,7 @@ kanjis.each(function() {
 sliders.each(function() {
     this.textField = $(this).parent().parent().find('span')[0];
     this.kanjisvg = $(this).parent().parent().parent().children('.kanjisvgParent').children()[0];
-    let speed = localStorage.getItem("kanji_speed");
+    let speed = localStorage.getItem("kanji_speed") || 1;
     this.value = speed;
     this.textField.innerHTML = "Animation speed: "+ speed;
 });
@@ -59,6 +64,36 @@ function toggleCompounds(event) {
     compoundParent.children[compoundParent.children.length-1].classList.toggle("hidden");
     event.target.parentElement.children[0].classList.toggle("closed");
 }
+
+// Changes the Stroke-SVG colors according to the given color scheme. args = light / dark
+function changeStrokeSvgColorScheme(scheme) {
+    let index = scheme == "light" ? 0 : 1;
+    let indexInv = scheme == "light" ? 1 : 0;
+    let obj = $('object');
+    if (obj.length == 0)
+        return;
+    let contentDoc = $(obj[0].contentDocument);
+
+    contentDoc.find("path").filter(function() {
+        return $(this).css('stroke') == svgColorScheme[indexInv][0];
+    }).css("stroke", svgColorScheme[index][0]);
+    contentDoc.find("path").filter(function() {
+        return $(this).css('stroke') == svgColorScheme[indexInv][1];
+    }).css("stroke", svgColorScheme[index][1]);
+    contentDoc.find("line").css("stroke", svgColorScheme[index][2]);
+    contentDoc.find("circle").css("fill", svgColorScheme[index][3]);
+    contentDoc.find("circle").css("opacity", svgColorScheme[index][4]);
+}
+
+// When document is ready, initially set the color scheme
+Util.awaitDocumentReady(() => {
+    changeStrokeSvgColorScheme(localStorage.getItem('theme'));
+});
+
+// Catch theme changes and apply to svg
+document.addEventListener('theme-changed', function (e) {
+    changeStrokeSvgColorScheme(localStorage.getItem('theme'));
+},false);
 
 // Toggle all compounds on keypress
 $(document).on("keypress", (event) => {

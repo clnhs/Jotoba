@@ -8,10 +8,13 @@ use crate::query_parser;
 use super::query_parser::QueryType;
 
 use itertools::Itertools;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use resources::{
     models::kanji,
     parse::jmdict::{languages::Language, misc::Misc, part_of_speech::PosSimple},
 };
+
+const QUERY_ENCODE_SET: &AsciiSet = &CONTROLS.add(b'/');
 
 /// A single user provided query in a parsed format
 #[derive(Debug, Clone, PartialEq, Default, Hash)]
@@ -27,6 +30,7 @@ pub struct Query {
     pub page: usize,
     pub word_index: usize,
     pub parse_japanese: bool,
+    pub language_override: Option<Language>,
     /// Whether to use the user query only or modify it if necessary
     pub use_original: bool,
 }
@@ -42,6 +46,7 @@ pub struct UserSettings {
     pub page_size: u32,
     pub kanji_page_size: u32,
     pub show_example_sentences: bool,
+    pub sentence_furigana: bool,
 }
 
 impl PartialEq for UserSettings {
@@ -71,6 +76,7 @@ impl Default for UserSettings {
             page_size: 10,
             kanji_page_size: 4,
             show_example_sentences: true,
+            sentence_furigana: true,
         }
     }
 }
@@ -83,6 +89,7 @@ pub enum Tag {
     Misc(Misc),
     Jlpt(u8),
     GenkiLesson(u8),
+    Hidden,
 }
 
 /// Hashtag based search tags
@@ -159,6 +166,13 @@ impl Default for QueryLang {
 impl Tag {
     /// Parse a tag from a string
     pub fn parse_from_str(s: &str) -> Option<Tag> {
+        if let Some(tag) = s.strip_prefix("#") {
+            match tag {
+                "hidden" | "hide" => return Some(Tag::Hidden),
+                _ => (),
+            }
+        }
+
         #[allow(irrefutable_let_patterns)]
         if let Some(tag) = Self::parse_genki_tag(s) {
             return Some(tag);
@@ -323,8 +337,16 @@ impl Query {
         self.tags.iter().filter_map(|i| i.as_misc())
     }
 
+    /// Returns the result offset by a given page
+    #[inline]
     pub fn page_offset(&self, page_size: usize) -> usize {
         query_parser::calc_page_offset(self.page, page_size)
+    }
+
+    /// Returns `true` if query has `tag`
+    #[inline]
+    pub fn has_tag(&self, tag: Tag) -> bool {
+        self.tags.iter().any(|i| *i == tag)
     }
 
     /// Returns the original_query with search type tags omitted
@@ -346,6 +368,16 @@ impl Query {
                 (is_tag && !is_search_type_tag) || !is_tag
             })
             .join(" ")
+    }
+
+    /// Encodes the query using percent encoding
+    pub fn get_query_encoded(&self) -> String {
+        utf8_percent_encode(&self.query, QUERY_ENCODE_SET).to_string()
+    }
+
+    /// Returns the language with lang override applied
+    pub fn get_lang_with_override(&self) -> Language {
+        self.language_override.unwrap_or(self.settings.user_lang)
     }
 }
 

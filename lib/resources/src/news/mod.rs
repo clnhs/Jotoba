@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use comrak::ComrakOptions;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 
@@ -63,7 +64,6 @@ impl News {
 
         NEWS_RETRIEVE
             .set(News { entries })
-            .ok()
             .expect("failed to set news");
 
         Ok(())
@@ -91,23 +91,36 @@ pub fn get() -> &'static News {
 fn parse_markdown<P: AsRef<Path>>(file: P) -> Result<(String, String), Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(file)?;
 
-    let short_html = markdown::to_html(shorten_markdown(&contents)).replace("\n", "<br>");
-    let full_html = markdown::to_html(&contents).replace("\n", "<br>");
+    let short_md = shorten_markdown(&contents);
+
+    let mut md_options = ComrakOptions::default();
+    md_options.render.unsafe_ = true;
+    md_options.extension.autolink = true;
+    md_options.extension.tasklist = true;
+    md_options.extension.strikethrough = true;
+
+    let short_html = comrak::markdown_to_html(&short_md, &md_options);
+    let full_html = comrak::markdown_to_html(&contents, &md_options);
 
     Ok((short_html, full_html))
 }
 
-fn shorten_markdown(full: &str) -> &str {
+fn shorten_markdown(full: &str) -> String {
     let line_count = full.split('\n').count().max(1);
     let conten_len = utils::real_string_len(full);
 
-    let mut end = full.len().min(50);
+    let mut text_iter = full.split('\n').filter(|i| !i.trim().starts_with('#'));
 
+    let out;
     if conten_len > 100 {
         if line_count > 3 {
-            end = full.split('\n').take(3).map(|i| i.len()).sum();
+            out = text_iter.take(3).join("\n");
+        } else {
+            out = text_iter.join("\n");
         }
+    } else {
+        out = text_iter.join("\n");
     }
 
-    &full[..end]
+    out
 }

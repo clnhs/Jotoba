@@ -20,21 +20,33 @@ $(document).on("keypress", (event) => {
             event.preventDefault();
             $('#search').focus();
             $('#search').select();
+            if (window.umami)
+                umami('shortcut: /');
             break
         case 'w': // Focus search bar
             changeSearchType(null, "0");
+            if (window.umami && Util.isIndexPage())
+                umami('shortcut: w');
             break;
         case 'k': // Change to Word Tab
             changeSearchType(null, "1");
+            if (window.umami && !Util.isIndexPage())
+                umami('shortcut: k');
             break;
         case 's': // Change to Sentence Tab
             changeSearchType(null, "2");
+            if (window.umami && !Util.isIndexPage())
+                umami('shortcut: s');
             break;
         case 'n': // Change to Names Tab
             changeSearchType(null, "3");
+            if (window.umami && !Util.isIndexPage())
+                umami('shortcut: n');
             break;
         case 'p': // Play first Audio on page
             $(".audioBtn").first().trigger("click");
+            if (window.umami && !Util.isIndexPage())
+                umami('shortcut: p');
             break;
         case "Enter": // Do a search while rad-picker is opened
             if (!$(".overlay.radical").hasClass("hidden")) {
@@ -54,6 +66,12 @@ $(document).on("keypress", (event) => {
 // Copies Furigana to clipboard on click
 $('.furigana-preview').on("click", (event) => {
     preventDefaultHighlight(event, 100, true, false);
+
+    // Prevent copying if the text was just a placeholder
+    if (event.target.innerHTML == "&nbsp;")
+        return;
+
+    // Copy and show message
     Util.showMessage("success", "furigana copied to clipboard.");
     Util.copyToClipboard($(event.target).html().trim());
 });
@@ -63,18 +81,22 @@ $('.furigana-preview').on("dblclick", (event) => {
     // Disable Events for a short time
     preventDefaultHighlight(event, 100, false);
 
-    // Show the correct message
-    $('.msg-message.msg-success.msg-visible').last().remove();
-    $('.msg-message.msg-success.msg-visible').last().html("<b>full</b> furigana copied to clipboard");
-
     // Find all furigana
     let parent = $(event.target.parentElement.parentElement);
-        let furi = "";
-        parent.find('.furigana-preview, .inline-kana-preview').each((i, element) => {
-            furi += element.innerHTML.trim();
-        });
-        Util.copyToClipboard(furi);
+    let furi = "";
+    parent.find('.furigana-preview, .inline-kana-preview').each((i, element) => {
+        furi += element.innerHTML.trim();
     });
+
+    // Prevent copying if the text was just a placeholder
+    if (furi === "&nbsp;")
+        return;
+
+    // Copy and show the correct message
+    Util.copyToClipboard(furi);
+    $('.msg-message.msg-success.msg-visible').last().remove();
+    $('.msg-message.msg-success.msg-visible').last().html("<b>full</b> furigana copied to clipboard");
+});
 
 // Copies translations to clipboard on double click
 $('.kanji-preview').on("dblclick", (event) => {
@@ -121,19 +143,26 @@ function startEventTimeout(targetElement, durationMs, disableClick = true, disab
 function copyTranslationAndShowMessage(textParent) {
     let fullContent = "";
     let onlyKanji = true;
+    let onlyKana = true;
 
     // Find all childs that are of interest
     $(textParent).find('.kanji-preview, .inline-kana-preview').each((i, element) => {
         let txt = element.innerHTML.trim();
         fullContent += txt
-        if (txt.charCodeAt(0) < 19968) {
-            onlyKanji = false;
+
+        for (char of txt) {
+            let isKanji = char.match(kanjiRegEx);
+            if (isKanji) {
+                onlyKana = false;
+            } else {
+                onlyKanji = false;
+            }
         }
     });
 
     // Copy and visual feedback
     Util.copyToClipboard(fullContent);
-    Util.showMessage("success", onlyKanji ? "kanji copied to clipboard." : "meaning copied to clipboard.");
+    Util.showMessage("success", onlyKanji ? "kanji copied to clipboard." : (onlyKana ? "kana copied to clipboard." : "word copied to clipboard."));
 }
 
 // Changes the search type in the upper row depending on the users input
@@ -148,8 +177,13 @@ function changeSearchType(html, newType) {
 Util.awaitDocumentReady(() => {
     if (Util.toBoolean(Cookies.get("focus_searchbar")) || document.location.href.slice(0, -1) == document.location.origin) {
         preventNextApiCall = true;
-        $('#search').focus();
+
+        let s = $('#search');
+        s.focus();
         Util.setCaretPosition("search", -1);
+        if (Util.toBoolean(Cookies.get("select_searchbar_content"))) {
+            s[0].setSelectionRange(0, s[0].value.length);
+        }
     }
 });
 
@@ -181,7 +215,9 @@ Util.awaitDocumentReady(() => {
     
     // Install the serviceWorker for PWA
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/service-worker.js')
+        navigator.serviceWorker.register('/service-worker.js', {
+            scope: "."
+        })
         .catch(function(error) {
           console.log('Service worker registration failed, error:', error);
         });

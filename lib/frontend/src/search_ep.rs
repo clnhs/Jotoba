@@ -100,7 +100,7 @@ async fn do_search<'a>(
     query: &'a Query,
     config: &'a Config,
 ) -> Result<BaseData<'a>, web_error::Error> {
-    let mut base_data = BaseData::new(locale_dict, settings, &config.asset_hash);
+    let mut base_data = BaseData::new(locale_dict, settings, &config.asset_hash, &config);
 
     let result_data = match querytype {
         QueryType::Kanji => kanji_search(&mut base_data, &query).await,
@@ -126,7 +126,7 @@ async fn sentence_search<'a>(base_data: &mut BaseData<'a>, query: &'a Query) -> 
     let result = web::block(move || search::sentence::search(&q)).await??;
 
     base_data.with_pages(result.len as u32, query.page as u32);
-    Ok(ResultData::Sentence(result.items))
+    Ok(ResultData::Sentence(result))
 }
 
 /// Perform a kanji search
@@ -171,6 +171,10 @@ fn build_search_help(querytype: QueryType, query: &Query) -> Option<SearchHelp> 
             QueryType::Names => help.names = search::name::guess_result(query),
             QueryType::Words => help.words = search::word::guess_result(query),
         }
+    }
+
+    if querytype == QueryType::Words {
+        help.other_langs = search::word::guess_inp_language(query);
     }
 
     (!help.is_empty()).then(|| help)
