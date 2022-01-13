@@ -10,7 +10,10 @@ pub mod index;
 pub mod news;
 mod pagination;
 pub mod search_ep;
+pub mod search_help;
 mod session;
+pub mod templ_utils;
+pub mod unescaped;
 mod url_query;
 pub mod user_settings;
 pub mod web_error;
@@ -24,15 +27,13 @@ use localization::{
     TranslationDict,
 };
 use pagination::Pagination;
-use resources::{
-    models::names::Name, news::NewsEntry, parse::jmdict::languages::Language as ResLanguage,
-};
-use search::{engine::guess::Guess, query::Query, sentence::result::SentenceResult};
+use resources::news::NewsEntry;
+use search::{query::Query, sentence::result::SentenceResult};
 
-use search::{
-    kanji::result::Item as KanjiItem, query::UserSettings, query_parser::QueryType,
-    word::result::WordResult,
-};
+use search::{kanji::result::Item as KanjiItem, query::UserSettings, word::result::WordResult};
+use search_help::SearchHelp;
+use types::jotoba::{names::Name, search::QueryType};
+use unescaped::{UnescapedStr, UnescapedString};
 
 /// Data for the base template
 pub struct BaseData<'a> {
@@ -71,55 +72,7 @@ pub enum ResultData {
     Sentence(SentenceResult),
 }
 
-/// Structure containing information for better search help in case no item was
-/// found in a search
-#[derive(Clone, Default, Debug)]
-pub struct SearchHelp {
-    words: Option<Guess>,
-    names: Option<Guess>,
-    sentences: Option<Guess>,
-    kanji: Option<Guess>,
-    other_langs: Vec<ResLanguage>,
-}
-
-impl SearchHelp {
-    /// Returns `true` if `SearchHelp` is not helpful at all (empty)
-    pub fn is_empty(&self) -> bool {
-        self.iter_items().next().is_none()
-    }
-
-    /// Returns an iterator over all (QueryType, Guess) pairs that have a value
-    pub fn iter_items(&self) -> impl Iterator<Item = (QueryType, Guess)> {
-        let types = &[
-            (self.words, QueryType::Words),
-            (self.names, QueryType::Names),
-            (self.sentences, QueryType::Sentences),
-            (self.kanji, QueryType::Kanji),
-        ];
-
-        types
-            .iter()
-            .filter_map(|i| i.0.is_some().then(|| (i.1, i.0.unwrap())))
-            .filter(|i| i.1.value != 0)
-            .collect::<Vec<_>>()
-            .into_iter()
-    }
-
-    pub fn iter_langs(&self) -> impl Iterator<Item = (ResLanguage, &'static str)> + '_ {
-        self.other_langs
-            .iter()
-            .map(|lang| (*lang, lang.to_query_format()))
-    }
-}
-
 impl<'a> BaseData<'a> {
-    #[inline]
-    pub fn get_search_help(&self) -> Option<&SearchHelp> {
-        let help = self.site.as_search_result()?.search_help.as_ref()?;
-        println!("{}", help.is_empty());
-        (!help.is_empty()).then(|| help)
-    }
-
     #[inline]
     pub fn new(
         dict: &'a TranslationDict,
@@ -176,6 +129,12 @@ impl<'a> BaseData<'a> {
     }
 
     #[inline]
+    pub fn get_search_help(&self) -> Option<&SearchHelp> {
+        let help = self.site.as_search_result()?.search_help.as_ref()?;
+        (!help.is_empty()).then(|| help)
+    }
+
+    #[inline]
     pub fn get_search_site_id(&self) -> u8 {
         if let Site::SearchResult(ref res) = self.site {
             return match res.result {
@@ -193,14 +152,14 @@ impl<'a> BaseData<'a> {
     pub fn get_search_site_name(&self) -> &str {
         if let Site::SearchResult(ref res) = self.site {
             return match res.result {
-                ResultData::Word(_) => self.gettext("Words"),
-                ResultData::KanjiInfo(_) => self.gettext("Kanji"),
-                ResultData::Sentence(_) => self.gettext("Sentences"),
-                ResultData::Name(_) => self.gettext("Names"),
+                ResultData::Word(_) => self.gettext("Words").as_str(),
+                ResultData::KanjiInfo(_) => self.gettext("Kanji").as_str(),
+                ResultData::Sentence(_) => self.gettext("Sentences").as_str(),
+                ResultData::Name(_) => self.gettext("Names").as_str(),
             };
         }
 
-        self.gettext("Words")
+        self.gettext("Words").as_str()
     }
 
     #[inline]
@@ -275,6 +234,30 @@ impl ResultData {
     }
 }
 
+impl<'a> SearchResult<'a> {
+    pub(crate) fn og_tag_info(&self) -> String {
+        format!("{} results. See more...", self.result_count())
+    }
+
+    pub(crate) fn search_type_ogg(&self) -> &'static str {
+        match self.result {
+            ResultData::Word(_) => "words",
+            ResultData::KanjiInfo(_) => "kanji",
+            ResultData::Sentence(_) => "sentences",
+            ResultData::Name(_) => "names",
+        }
+    }
+
+    fn result_count(&self) -> usize {
+        match &self.result {
+            ResultData::Word(w) => w.count,
+            ResultData::KanjiInfo(k) => k.len(),
+            ResultData::Name(n) => n.len(),
+            ResultData::Sentence(s) => s.items.len(),
+        }
+    }
+}
+
 /// Translation helper
 impl<'a> BaseData<'a> {
     #[inline]
@@ -283,65 +266,125 @@ impl<'a> BaseData<'a> {
     }
 
     #[inline]
-    pub fn gettext<T: Translatable>(&self, t: T) -> &'a str {
-        t.gettext(&self.dict, Some(self.get_lang()))
+    pub fn gettext<T: Translatable>(&self, t: T) -> UnescapedStr<'a> {
+        t.gettext(&self.dict, Some(self.get_lang())).into()
     }
 
     #[inline]
-    pub fn gettext_custom<T: Translatable>(&self, t: T) -> String {
-        t.gettext_custom(&self.dict, Some(self.get_lang()))
+    pub fn gettext_custom<T: Translatable>(&self, t: T) -> UnescapedString {
+        t.gettext_custom(&self.dict, Some(self.get_lang())).into()
     }
 
     #[inline]
-    pub fn pgettext<T: Translatable>(&self, t: T, context: &'a str) -> &'a str {
+    pub fn pgettext<T: Translatable>(&self, t: T, context: &'a str) -> UnescapedStr<'a> {
         t.pgettext(&self.dict, context, Some(self.get_lang()))
+            .into()
     }
 
     #[inline]
-    pub fn ngettext<T: TranslatablePlural>(&self, t: T, n: u64) -> &'a str {
-        t.ngettext(&self.dict, n, Some(self.get_lang()))
+    pub fn ngettext<T: TranslatablePlural>(&self, t: T, n: u64) -> UnescapedStr<'a> {
+        t.ngettext(&self.dict, n, Some(self.get_lang())).into()
     }
 
     #[inline]
-    pub fn pngettext<T: TranslatablePlural>(&self, t: T, context: &'a str, n: u64) -> &'a str {
+    pub fn pngettext<T: TranslatablePlural>(
+        &self,
+        t: T,
+        context: &'a str,
+        n: u64,
+    ) -> UnescapedStr<'a> {
         t.npgettext(&self.dict, context, n, Some(self.get_lang()))
+            .into()
     }
 
     // Format functions
 
     #[inline]
-    pub fn gettext_fmt<T: Translatable, V: Display + Sized>(&self, t: T, values: &[V]) -> String {
+    pub fn gettext_fmt<T: Translatable, V: Display + Sized + Clone>(
+        &self,
+        t: T,
+        values: &[V],
+    ) -> UnescapedString {
         t.gettext_fmt(&self.dict, values, Some(self.get_lang()))
+            .into()
     }
 
     #[inline]
-    pub fn pgettext_fmt<T: Translatable, V: Display + Sized>(
+    pub fn pgettext_fmt<T: Translatable, V: Display + Sized + Clone>(
         &self,
         t: T,
         context: &'a str,
         values: &[V],
-    ) -> String {
+    ) -> UnescapedString {
         t.pgettext_fmt(&self.dict, context, values, Some(self.get_lang()))
+            .into()
     }
 
     #[inline]
-    pub fn ngettext_fmt<T: TranslatablePlural, V: Display + Sized>(
+    pub fn ngettext_fmt<T: TranslatablePlural, V: Display + Sized + Clone>(
         &self,
         t: T,
         n: u64,
         values: &[V],
-    ) -> String {
+    ) -> UnescapedString {
         t.ngettext_fmt(&self.dict, n, values, Some(self.get_lang()))
+            .into()
     }
 
     #[inline]
-    pub fn pngettext_fmt<T: TranslatablePlural, V: Display + Sized>(
+    pub fn pngettext_fmt<T: TranslatablePlural, V: Display + Sized + Clone>(
         &self,
         t: T,
         context: &'a str,
         n: u64,
         values: &[V],
-    ) -> String {
+    ) -> UnescapedString {
         t.npgettext_fmt(&self.dict, context, n, values, Some(self.get_lang()))
+            .into()
     }
+
+    #[inline]
+    pub fn gt_search_link<T: Translatable, V: Display + Sized + Clone>(
+        &self,
+        t: T,
+        value: V,
+    ) -> UnescapedString {
+        let link = format_search_link(value);
+        t.gettext_fmt(&self.dict, &[link], Some(self.get_lang()))
+            .into()
+    }
+
+    #[inline]
+    pub fn gt_search_links<T: Translatable, V: Display + Sized + Clone>(
+        &self,
+        t: T,
+        link: usize,
+        values: &[V],
+    ) -> UnescapedString {
+        let mut values = values.iter().map(|i| i.to_string()).collect::<Vec<_>>();
+        values[link] = format_search_link(&values[link]);
+        t.gettext_fmt(&self.dict, &values, Some(self.get_lang()))
+            .into()
+    }
+
+    #[inline]
+    pub fn ngt_search_links<T: TranslatablePlural, V: Display + Sized + Clone>(
+        &self,
+        t: T,
+        link: usize,
+        values: &[V],
+        n: u64,
+    ) -> UnescapedString {
+        let mut values = values.iter().map(|i| i.to_string()).collect::<Vec<_>>();
+        values[link] = format_search_link(&values[link]);
+        t.ngettext_fmt(&self.dict, n, &values, Some(self.get_lang()))
+            .into()
+    }
+}
+
+fn format_search_link<V: Display + Sized + Clone>(input: V) -> String {
+    format!(
+        "<a class='clickable no-align green' href='/search/{}'>{}</a>",
+        input, input
+    )
 }

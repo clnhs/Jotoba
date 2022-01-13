@@ -1,18 +1,8 @@
 .search-annotation {
     color: var(--tagColor);
-    display: flex;
-    align-items: flex-start;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    overflow-y: auto;
     max-height: 150px;
-    height: -webkit-max-content;
-    height: -moz-max-content;
-    height: max-content;
-    padding-right: 75px;
-    padding-left: 75px;
-    scrollbar-width: none;
+    overflow: scroll;
+    margin: 0 150px 0 150px;
 }
 
 .search-annotation::-webkit-scrollbar {
@@ -32,8 +22,8 @@
 /* Mobile only */
 @media only screen and (max-width: 600px) {
     .search-annotation {
-        padding-right: 30px;
-        padding-left: 30px;
+        padding-left: 0;
+        margin: -15px 5px 0 5px;
     }
     
     .search-inflection {

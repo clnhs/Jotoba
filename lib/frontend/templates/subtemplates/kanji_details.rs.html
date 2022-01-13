@@ -5,7 +5,7 @@
 @(data: &BaseData, kanji: Vec<Item>)
 
 @if kanji.is_empty() {
-  @:search_help(&data, data.gettext("kanji"))
+  @:search_help(&data, data.gettext("kanji").as_str())
 }
 
 <script defer src="/variable_assets/@data.asset_hash/assets/js/page/kanjiPage.js"></script>
@@ -24,7 +24,7 @@
            @k_item.kanji.literal
          </span>
          <div class="kanji-preview-info">
-           <div class="notes stroke"><b>@k_item.kanji.stroke_count</b> @data.gettext("strokes") </div>
+           <div class="notes stroke"><b>@data.ngettext_fmt("{} stroke", k_item.kanji.stroke_count as u64, &[k_item.kanji.stroke_count])</b> </div>
             <div class="rad-parts-parent">
               <div class="notes rad"><b>@data.gettext("Radical"):</b>
                 <br>
@@ -129,6 +129,7 @@
          @if k_item.kanji.has_stroke_frames() {
            <hr/>
            <div class="stroke-container">
+              <img src="@k_item.kanji.get_stroke_frames_url()" type="image/svg+xml" style="opacity: 0; margin-bottom: -130px;">
               <object data="@k_item.kanji.get_stroke_frames_url()" type="image/svg+xml"></object>
            </div>
          }

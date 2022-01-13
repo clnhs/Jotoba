@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use japanese::JapaneseExt;
 use levenshtein::levenshtein;
-use resources::models::{kanji, names::Name};
+use types::jotoba::{kanji, names::Name};
 
 /// Represents the ordering for name search
 /// result based on non-native search-input
@@ -82,11 +82,11 @@ impl<'a> ByNative<'a> {
 /// result based on native search-input
 pub(crate) struct ByKanji<'a> {
     query: &'a str,
-    kanji: &'a kanji::Reading,
+    kanji: &'a kanji::ReadingSearch,
 }
 
 impl<'a> ByKanji<'a> {
-    pub(crate) fn new(query: &'a str, kanji: &'a kanji::Reading) -> Self {
+    pub(crate) fn new(query: &'a str, kanji: &'a kanji::ReadingSearch) -> Self {
         Self { query, kanji }
     }
 

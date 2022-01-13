@@ -1,7 +1,10 @@
 mod kanji;
 pub mod order;
+mod regex;
 pub mod result;
 pub mod tag_only;
+
+use std::time::Instant;
 
 use crate::{
     engine::{
@@ -18,18 +21,16 @@ use self::result::{InflectionInformation, WordResult};
 use super::query::{Query, QueryLang};
 use error::Error;
 use itertools::Itertools;
-use japanese::{inflection::SentencePart, JapaneseExt};
-use resources::{
-    models::{
-        kanji::Kanji,
-        words::{filter_languages, Word},
-    },
-    parse::jmdict::{languages::Language, part_of_speech::PosSimple},
-};
+use japanese::{inflection::SentencePart, jp_parsing::igo_unidic::WordClass, JapaneseExt};
 use result::Item;
 
 use japanese::jp_parsing::{InputTextParser, ParseResult, WordItem};
-use utils::to_option;
+use types::jotoba::{
+    kanji::Kanji,
+    languages::Language,
+    words::{filter_languages, part_of_speech::PosSimple, Word},
+};
+use utils::{real_string_len, to_option};
 
 pub struct Search<'a> {
     query: &'a Query,
@@ -38,7 +39,10 @@ pub struct Search<'a> {
 /// Search among all data based on the input query
 #[inline]
 pub fn search(query: &Query) -> Result<WordResult, Error> {
-    Search { query }.do_search()
+    let start = Instant::now();
+    let res = Search { query }.do_search();
+    println!("Search took {:?}", start.elapsed());
+    res
 }
 
 #[derive(Default)]
@@ -143,34 +147,37 @@ impl<'a> Search<'a> {
         }
 
         // Lexemes from `parsed` converted to sentence parts
-        let mut sentence_parts = parsed
+        let sentence_parts = parsed
             .items
             .into_iter()
             .enumerate()
-            .map(|(pos, i)| i.into_sentence_part(pos as i32))
+            .map(|(pos, i)| {
+                let wc = i.word_class.clone();
+                let mut part = i.into_sentence_part(pos as i32);
+                if !part.text.has_kanji() {
+                    return part;
+                }
+
+                if let Some((furi, guessed)) = furigana_by_reading(&part.lexeme, &wc) {
+                    part.furigana = Some(furi);
+                    part.furi_guessed = guessed;
+                }
+
+                if let Some(ref furigana) = part.furigana {
+                    let furi_end = match japanese::furigana::last_kana_part(&furigana) {
+                        Some(s) => s,
+                        None => return part,
+                    };
+                    let text_end = match japanese::furigana::last_kana_part(&part.text) {
+                        Some(s) => s,
+                        None => return part,
+                    };
+                    let combined = format!("{}{}", &furigana[..furi_end], &part.text[text_end..]);
+                    part.furigana = Some(combined);
+                }
+                part
+            })
             .collect_vec();
-
-        // Request furigana for each kanji containing part
-        for part in sentence_parts.iter_mut() {
-            if !part.text.has_kanji() {
-                continue;
-            }
-
-            part.furigana = furigana_by_reading(&part.lexeme);
-
-            if let Some(ref furigana) = part.furigana {
-                let furi_end = match japanese::furigana::last_kana_part(&furigana) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let text_end = match japanese::furigana::last_kana_part(&part.text) {
-                    Some(s) => s,
-                    None => continue,
-                };
-                let combined = format!("{}{}", &furigana[..furi_end], &part.text[text_end..]);
-                part.furigana = Some(combined)
-            }
-        }
 
         Some(sentence_parts)
     }
@@ -216,6 +223,17 @@ impl<'a> Search<'a> {
     > {
         if self.query.language != QueryLang::Japanese && !query_str.is_japanese() {
             return Err(Error::NotFound);
+        }
+
+        // Try regex search
+        // prevent heavy queries
+        if real_string_len(query_str) >= 2 || query_str.has_kanji() {
+            if let Some(regex_query) = self.query.as_regex_query() {
+                let limit = self.query.settings.page_size;
+                let offset = self.query.page_offset;
+                let res = regex::search(regex_query, limit, offset)?;
+                return Ok((res, None, None, query_str.to_string()));
+            }
         }
 
         let (query, morpheme, sentence) = self.get_query(query_str)?;
@@ -275,6 +293,8 @@ impl<'a> Search<'a> {
                 .offset(self.query.page_offset)
                 .threshold(0.3f32);
 
+        println!("searching in {}", self.query.get_lang_with_override());
+
         if self.query.settings.show_english
             && self.query.settings.user_lang != Language::English
             // Don't show english results if user wants to search in a specified language
@@ -318,6 +338,11 @@ impl<'a> Search<'a> {
         if !self.query.use_original
             && count < 50
             && japanese::guessing::could_be_romaji(&self.query.query)
+            && !SearchTask::<foreign::Engine>::with_language(
+                &self.query.query,
+                self.query.get_lang_with_override(),
+            )
+            .has_term()
         {
             let hg_query = self.query.query.to_hiragana();
             let hg_search = self.native_search(&hg_query);
@@ -424,7 +449,7 @@ fn inflection_info(morpheme: &Option<WordItem>) -> Option<InflectionInformation>
 }
 
 /// Returns furigana of the given `morpheme` if available
-fn furigana_by_reading(morpheme: &str) -> Option<String> {
+fn furigana_by_reading(morpheme: &str, wc: &Option<WordClass>) -> Option<(String, bool)> {
     let word_storage = resources::get().words();
 
     let st = SearchTask::<native::Engine>::new(morpheme)
@@ -434,14 +459,48 @@ fn furigana_by_reading(morpheme: &str) -> Option<String> {
     let found = st.find().ok()?;
 
     // Don't produce potentially wrong furigana if multiple readings are available
-    // TODO: guess furigana based on language parser part of speech tag and return it anyways. Let
-    // the frontend know that its guessed so it can be previewed differently
     if found.len() != 1 {
+        if let Some(wc) = wc {
+            return guess_furigana(found, wc).map(|i| (i, true));
+        }
         return None;
     }
 
     let word = word_storage.by_sequence(found[0].item.sequence as u32)?;
-    word.furigana.as_ref().cloned()
+    word.furigana.as_ref().cloned().map(|i| (i, false))
+}
+
+pub fn guess_furigana(res: SearchResult<&Word>, wc: &WordClass) -> Option<String> {
+    let pos = wc_to_simple_pos(wc)?;
+
+    let possible = res
+        .into_iter()
+        .filter(|i| i.item.has_pos(&[pos]))
+        .collect::<Vec<_>>();
+
+    if possible.len() == 1 {
+        let word_storage = resources::get().words();
+        let word = word_storage.by_sequence(possible[0].item.sequence as u32)?;
+        return word.furigana.as_ref().cloned();
+    }
+
+    None
+}
+
+pub fn wc_to_simple_pos(wc: &WordClass) -> Option<PosSimple> {
+    Some(match wc {
+        WordClass::Particle(_) => PosSimple::Particle,
+        WordClass::Verb(_) => PosSimple::Verb,
+        WordClass::Adjective(_) => PosSimple::Adjective,
+        WordClass::Adverb => PosSimple::Adverb,
+        WordClass::Noun(_) => PosSimple::Noun,
+        WordClass::Pronoun => PosSimple::Pronoun,
+        WordClass::Interjection => PosSimple::Interjection,
+        WordClass::Conjungtion => PosSimple::Conjungation,
+        WordClass::Suffix => PosSimple::Suffix,
+        WordClass::Prefix => PosSimple::Prefix,
+        _ => return None,
+    })
 }
 
 pub fn guess_inp_language(query: &Query) -> Vec<Language> {

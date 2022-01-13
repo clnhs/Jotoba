@@ -1,5 +1,5 @@
-use resources::parse::jmdict::languages::Language;
 use std::{cmp::Ordering, hash::Hash};
+use types::jotoba::languages::Language;
 
 /// A single item (result) in a set of search results
 #[derive(Clone, Copy, Default, Debug)]
@@ -66,5 +66,19 @@ impl<T: PartialEq> ResultItem<T> {
             relevance,
             language: Some(language),
         }
+    }
+}
+
+impl<T: PartialEq> From<T> for ResultItem<T> {
+    #[inline]
+    fn from(item: T) -> Self {
+        ResultItem::new(item, 1)
+    }
+}
+
+impl<T: PartialEq> From<(T, usize)> for ResultItem<T> {
+    #[inline]
+    fn from((item, relevance): (T, usize)) -> Self {
+        ResultItem::new(item, relevance)
     }
 }

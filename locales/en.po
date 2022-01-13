@@ -13,7 +13,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"PO-Revision-Date: 2021-11-29 21:47+0100\n"
+"PO-Revision-Date: 2021-12-12 16:30+0100\n"
 "Last-Translator:  <jojii@gmx.net>\n"
 "Language-Team: English\n"
 "Language: en\n"
@@ -632,6 +632,9 @@ msgstr ""
 msgid "Search for japanese particles"
 msgstr ""
 
+msgid "Lists iru/eru ending verbs which are conjugated as godan verbs"
+msgstr ""
+
 msgid "Search for sfx words [comic sounds]"
 msgstr ""
 
@@ -710,15 +713,16 @@ msgstr ""
 
 ## Kanji results
 
-# strokes suffix
-
 msgid "Part"
 msgid_plural "Parts"
 msgstr[0] "Part"
 msgstr[1] "Parts"
 
-msgid "strokes"
-msgstr ""
+# strokes suffix
+msgid "{} stroke"
+msgid_plural "{} strokes"
+msgstr[0] "{} stroke"
+msgstr[1] "{} strokes"
 
 msgid "Radical"
 msgstr ""
@@ -757,8 +761,10 @@ msgstr ""
 msgid "Words and kanji"
 msgstr ""
 
-msgid "{} could be an inflection of"
-msgstr ""
+msgid "{} could be an inflection of {}, with this form:"
+msgid_plural "{} could be an inflection of {}, with this forms:"
+msgstr[0] "{} could be an inflection of {}, with this form:"
+msgstr[1] "{} could be an inflection of {}, with this forms:"
 
 msgid "Temporarily switched language to {}"
 msgstr ""
@@ -829,10 +835,10 @@ msgstr ""
 msgid "Conjugations"
 msgstr ""
 
-msgid "Antonym of"
-msgstr ""
+msgid "Antonym of {}"
+msgstr "Antonym of {}"
 
-msgid "See also"
+msgid "See also {}"
 msgstr ""
 
 msgid "Pitch accent"
@@ -883,7 +889,7 @@ msgstr ""
 msgid "common word"
 msgstr ""
 
-msgid "JLPT"
+msgid "JLPT N{}"
 msgstr ""
 
 msgid "Download audio"

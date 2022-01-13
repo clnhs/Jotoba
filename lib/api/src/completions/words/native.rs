@@ -2,8 +2,9 @@ use std::{cmp::min, collections::BinaryHeap, time::Instant};
 
 use itertools::Itertools;
 use japanese::jp_parsing::InputTextParser;
-use resources::models::{suggestions::native_words::NativeSuggestion, words::Word};
+use resources::models::suggestions::native_words::NativeSuggestion;
 use search::engine::SearchTask;
+use types::jotoba::words::Word;
 use utils::binary_search::BinarySearchable;
 
 use super::super::*;
@@ -114,24 +115,6 @@ fn search_cmp(e: &NativeSuggestion, query_str: &str) -> Ordering {
         Ordering::Equal
     } else {
         e.text.as_str().cmp(&query_str)
-    }
-}
-
-impl From<&Word> for WordPair {
-    #[inline]
-    fn from(word: &Word) -> Self {
-        let main_reading = word.get_reading().reading.to_owned();
-        if word.reading.kanji.is_some() {
-            WordPair {
-                secondary: Some(main_reading),
-                primary: word.reading.kana.reading.clone(),
-            }
-        } else {
-            WordPair {
-                primary: main_reading,
-                secondary: None,
-            }
-        }
     }
 }
 

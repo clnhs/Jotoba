@@ -1,7 +1,6 @@
 mod kanji;
 mod names;
 mod request;
-mod response;
 mod storage;
 mod words;
 
@@ -12,12 +11,11 @@ use std::cmp::Ordering;
 use config::Config;
 use error::api_error::RestError;
 use japanese::JapaneseExt;
-use query_parser::QueryType;
-use resources::{models, parse::jmdict::languages::Language};
-use response::Response;
-use search::{
-    query::{Form, Query, QueryLang},
-    query_parser,
+use search::query::{Form, Query, QueryLang};
+use types::api::completions::{Response, WordPair};
+use types::{
+    api::completions::Request,
+    jotoba::{languages::Language, search::QueryType},
 };
 use utils::bool_ord;
 
@@ -25,9 +23,6 @@ use actix_web::{
     rt::time,
     web::{self, Json},
 };
-use response::WordPair;
-
-use self::request::Request;
 
 /// Get search suggestions endpoint
 pub async fn suggestion_ep(
@@ -37,7 +32,7 @@ pub async fn suggestion_ep(
     request::validate(&payload)?;
 
     // Adjust payload and parse to query
-    let query = payload.adjust().get_query()?;
+    let query = request::get_query(&request::adjust(&payload))?;
 
     // time we allow the suggestion to use in total loaded from the configuration file
     let timeout = config.get_suggestion_timeout();
@@ -83,7 +78,7 @@ async fn kanji_suggestions(query: Query) -> Result<Response, RestError> {
 }
 
 /// Returns Some(KanjiReading) if query is or 'could be' a kanji reading query
-fn as_kanji_reading(query: &Query) -> Option<models::kanji::Reading> {
+fn as_kanji_reading(query: &Query) -> Option<types::jotoba::kanji::ReadingSearch> {
     match &query.form {
         Form::KanjiReading(r) => Some(r.clone()),
         _ => {
@@ -92,7 +87,7 @@ fn as_kanji_reading(query: &Query) -> Option<models::kanji::Reading> {
             let second = query_str.next()?;
 
             if first.is_kanji() && second == ' ' {
-                Some(models::kanji::Reading {
+                Some(types::jotoba::kanji::ReadingSearch {
                     reading: String::new(),
                     literal: first,
                 })
@@ -125,7 +120,7 @@ async fn try_word_suggestions(query: &Query) -> Option<Vec<WordPair>> {
     // Get sugesstions for matching language
     let word_pairs = match query.language {
         QueryLang::Japanese => words::native::suggestions(&query.query)?,
-        QueryLang::Foreign | QueryLang::Undetected => {
+        QueryLang::Foreign | QueryLang::Undetected | QueryLang::Korean => {
             let mut res = words::foreign::suggestions(&query, &query.query)
                 .await
                 .unwrap_or_default();

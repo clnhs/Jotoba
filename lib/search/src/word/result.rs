@@ -1,5 +1,5 @@
 use japanese::inflection::{Inflection, SentencePart};
-use resources::models::{kanji::Kanji, words::Word};
+use types::jotoba::{kanji::Kanji, words::Word};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WordResult {
@@ -16,6 +16,21 @@ impl WordResult {
     #[inline]
     pub fn has_word(&self) -> bool {
         self.items.iter().any(|i| i.is_word())
+    }
+
+    /// Returns all words and kanji split in two separate lists
+    pub fn get_items(&self) -> (Vec<&Word>, Vec<&Kanji>) {
+        let mut words = vec![];
+        let mut kanjis = vec![];
+
+        for item in &self.items {
+            match item {
+                Item::Word(word) => words.push(word),
+                Item::Kanji(kanji) => kanjis.push(kanji),
+            }
+        }
+
+        (words, kanjis)
     }
 }
 

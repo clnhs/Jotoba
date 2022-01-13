@@ -1,4 +1,4 @@
-@use resources::models::names::Name;
+@use types::jotoba::names::Name;
 @use super::search_help;
 @use search::name::result::get_types_humanized;
 @use crate::BaseData;
@@ -12,7 +12,7 @@
   <div class="main-info d-flex flex-column">
 
     @if names.is_empty() {
-      @:search_help(&data, data.gettext("names"))
+      @:search_help(&data, data.gettext("names").as_str())
     }
 
     @for name in names.iter() {

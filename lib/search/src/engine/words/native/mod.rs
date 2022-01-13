@@ -1,10 +1,11 @@
 pub mod index;
+pub mod regex;
+pub mod regex_index;
 
 use crate::engine::{document::SingleDocument, simple_gen_doc::GenDoc, Indexable, SearchEngine};
-use resources::{
-    models::{storage::ResourceStorage, words::Word},
-    parse::jmdict::languages::Language,
-};
+use resources::models::storage::ResourceStorage;
+use types::jotoba::languages::Language;
+use types::jotoba::words::Word;
 use vector_space_model::{DefaultMetadata, DocumentVector};
 
 pub struct Engine {}
@@ -36,7 +37,9 @@ impl SearchEngine for Engine {
     fn gen_query_vector(
         index: &vector_space_model::Index<Self::Document, Self::Metadata>,
         query: &str,
-    ) -> Option<DocumentVector<Self::GenDoc>> {
+        _allow_align: bool,
+        _language: Option<Language>,
+    ) -> Option<(DocumentVector<Self::GenDoc>, String)> {
         let query_document = GenDoc::new(vec![query]);
         let mut doc = DocumentVector::new(index.get_indexer(), query_document)?;
 
@@ -55,6 +58,6 @@ impl SearchEngine for Engine {
 
         doc.add_terms(index.get_indexer(), &terms, true, Some(0.03));
 
-        Some(doc)
+        Some((doc, query.to_owned()))
     }
 }

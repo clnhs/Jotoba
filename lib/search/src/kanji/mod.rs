@@ -3,11 +3,11 @@ pub mod result;
 mod tag_only;
 
 use itertools::Itertools;
-use resources::models::kanji::Kanji;
 use result::Item;
 
 use error::Error;
 use japanese::JapaneseExt;
+use types::jotoba::kanji::Kanji;
 
 use crate::{
     engine::{
@@ -37,11 +37,17 @@ pub fn search(query: &Query) -> Result<KanjiResult, Error> {
 
     let res;
 
-    if query.language == QueryLang::Japanese {
-        res = by_literals(&query.query)
-    } else {
-        res = by_meaning(&query.query)
-    };
+    match query.language {
+        QueryLang::Japanese => {
+            res = by_literals(&query.query);
+        }
+        QueryLang::Foreign | QueryLang::Undetected => {
+            res = by_meaning(&query.query);
+        }
+        QueryLang::Korean => {
+            res = by_korean_reading(&query.query);
+        }
+    }
 
     let mut items = to_item(res, &query);
     if !query_str.is_japanese() {
@@ -98,6 +104,24 @@ fn all_kanji_from_text(text: &str) -> Vec<Kanji> {
         .cloned()
         .take(100)
         .collect()
+}
+
+fn by_korean_reading(query: &str) -> Vec<Kanji> {
+    let kanji = resources::get().kanji();
+    let res = kanji
+        .all()
+        .filter(|k| {
+            let korean = &k.korean_h;
+            if korean.is_none() {
+                return false;
+            }
+            let korean = korean.as_ref().unwrap();
+            korean.iter().any(|kw| kw == query)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    res
 }
 
 /// Guesses the amount of results a search would return with given `query`
