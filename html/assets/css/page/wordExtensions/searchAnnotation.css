@@ -1,8 +1,18 @@
 .search-annotation {
     color: var(--tagColor);
     max-height: 150px;
-    overflow: scroll;
-    margin: 0 150px 0 150px;
+    margin-bottom: 15px;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+}
+
+.search-annotation .kanji-preview {
+    line-height: unset;
+}
+
+.search-annotation.no-center {
+    justify-content: unset;
 }
 
 .search-annotation::-webkit-scrollbar {
@@ -22,8 +32,7 @@
 /* Mobile only */
 @media only screen and (max-width: 600px) {
     .search-annotation {
-        padding-left: 0;
-        margin: -15px 5px 0 5px;
+        margin: -15px 0 0 5vw;
     }
     
     .search-inflection {

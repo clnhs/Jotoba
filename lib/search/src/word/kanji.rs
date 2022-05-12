@@ -57,7 +57,11 @@ fn words_with_kanji_reading(
 
     let literal = kanji.literal.to_string();
     let reading = reading.to_string();
-    let literal_reading = kanji.get_literal_reading(&reading);
+    //let literal_reading = kanji.get_literal_reading(&reading);
+    let literal_reading = kanji
+        .find_reading(&reading)
+        .map(|i| i.get_raw().to_string());
+
     search_task.set_result_filter(move |word| {
         if word.reading.kanji.is_none() {
             return false;
@@ -137,7 +141,7 @@ fn alternative_reading_search(search: &Search<'_>) -> Result<ResultData, Error> 
 }
 
 /// Load word assigned kanji
-pub(super) fn load_word_kanji_info(words: &[Word]) -> Result<Vec<Kanji>, Error> {
+pub fn load_word_kanji_info(words: &[Word]) -> Vec<Kanji> {
     let kanji_resources = resources::get().kanji();
 
     let kanji_literals = words
@@ -154,5 +158,5 @@ pub(super) fn load_word_kanji_info(words: &[Word]) -> Result<Vec<Kanji>, Error> 
         .take(10)
         .collect::<Vec<_>>();
 
-    Ok(kanji_literals)
+    kanji_literals
 }

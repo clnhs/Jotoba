@@ -71,8 +71,7 @@ $('.furigana-preview').on("click", (event) => {
 
     // Copy and show message
     preventDefaultHighlight(event, 100, true, false);
-    Util.showMessage("success", "furigana copied to clipboard.");
-    Util.copyToClipboard($(event.target).html().trim());
+    JotoTools.copyTextAndEcho($(event.target).html().trim(), "QOL_FURI_COPIED");
 });
 
 // Copies full Furigana to clipboard on dblclick
@@ -92,7 +91,83 @@ $('.furigana-preview').on("dblclick", (event) => {
     preventDefaultHighlight(event, 100, false);
     Util.copyToClipboard(furi);
     $('.msg-message.msg-success.msg-visible').last().remove();
-    $('.msg-message.msg-success.msg-visible').last().html("<b>full</b> furigana copied to clipboard");
+    $('.msg-message.msg-success.msg-visible').last().html(getText("QOL_FURI_COPIED_ALL"));
+});
+
+// Copies translations to clipboard on double click
+$('.kanji-preview').on("dblclick", (event) => {
+    // Check if element should not be copied
+    if (!shouldCopyKanji())
+        return;
+
+    // Copy
+    preventDefaultHighlight(event, 500, false);
+    copyTranslationAndShowMessage(event.target.parentElement.parentElement);
+});
+
+// Prevent double click highlight
+document.querySelectorAll(".furigana-kanji-container").forEach(container => {
+    container.addEventListener('mousedown', function (event) {
+        if (event.detail > 1) {
+            event.preventDefault();
+        }
+    }, false);
+});
+
+// Copies translations to clipboard on double click
+$('.inline-kana-preview').on("dblclick", (event) => {
+    // Check if element should not be copied
+    if (!shouldCopyKanji())
+        return;
+
+    // Copy
+    preventDefaultHighlight(event, 500, false);
+    copyTranslationAndShowMessage(event.target.parentElement);
+});
+
+// <rub>-tag Fix for standard double click 
+document.querySelectorAll(".furigana-kanji-container").forEach(container => {
+    container.addEventListener("dblclick", () => {
+        // Dont do anything if auto-copy is turned on
+        if (shouldCopyKanji()) {
+            return;
+        }
+
+        // Get and clear the selection
+        let selection = window.getSelection();
+        selection.removeAllRanges();
+
+        // Select all non-furigana children #1 Firefox exclusive: Multiple selection ranges
+        if (navigator.userAgent.search("Firefox") > -1) {
+            container.childNodes.forEach((child) => {
+                var range = document.createRange();
+                range.setStartBefore(child);
+
+                if (child.tagName === "RUBY") {
+                    range.setEndAfter(child.children[0]);
+                } else {
+                    range.setEndAfter(child);
+                }
+
+	            selection.addRange(range);
+            });
+        
+        // Select all non-furigana children #2
+        } else {
+            var range = document.createRange();
+            range.setStartBefore(container);
+            let lastChild = container.lastChild;
+            
+            if (lastChild.tagName === "RUBY") {
+                range.setEndAfter(lastChild.children[0]);
+            } else {
+                range.setEndAfter(lastChild);
+            }
+            
+            selection.addRange(range);
+        }
+    });
+
 });
 
 // Check conditions for copying Furigana 
@@ -106,20 +181,15 @@ function shouldCopyFurigana(event) {
         return false;
     }
 
-    return true;
+    // Prevent if user has removed the feature
+    return Settings.other.enableDoubleClickCopy.val;
 }
 
-// Copies translations to clipboard on double click
-$('.kanji-preview').on("dblclick", (event) => {
-    preventDefaultHighlight(event, 500, false);
-    copyTranslationAndShowMessage(event.target.parentElement.parentElement);
-});
-
-// Copies translations to clipboard on double click
-$('.inline-kana-preview').on("dblclick", (event) => {
-    preventDefaultHighlight(event, 500, false);
-    copyTranslationAndShowMessage(event.target.parentElement);
-});
+// Check conditions for copying Kanji 
+function shouldCopyKanji() {
+    // Prevent if user has removed the feature
+    return Settings.other.enableDoubleClickCopy.val;
+}
 
 // Prevents the default User highlighting
 function preventDefaultHighlight(event, timeoutDurationMs, disableClick, disableDoubleClick) {
@@ -172,8 +242,7 @@ function copyTranslationAndShowMessage(textParent) {
     });
 
     // Copy and visual feedback
-    Util.copyToClipboard(fullContent);
-    Util.showMessage("success", onlyKanji ? "kanji copied to clipboard." : (onlyKana ? "kana copied to clipboard." : "copied to clipboard."));
+    JotoTools.copyTextAndEcho(fullContent,  onlyKanji ? getText("QOL_KANJI_COPIED") : (onlyKana ? getText("QOL_KANA_COPIED") : getText("QOL_SENTENCE_COPIED")))
 }
 
 // Changes the search type in the upper row depending on the users input
@@ -186,9 +255,14 @@ function changeSearchType(html, newType) {
 
 // Focus Search Bar on load if the user wants it to (or on index page)
 Util.awaitDocumentReady(() => {
-    if (Util.toBoolean(Cookies.get("focus_searchbar")) || document.location.href.slice(0, -1) == document.location.origin) {
-        preventNextApiCall = true;
+    let focus_searchbar = Util.toBoolean(Cookies.get("focus_searchbar"));
+    let is_index = Util.isIndexPage();
 
+    if (focus_searchbar && !is_index) {
+        preventNextApiCall = true;
+    }
+
+    if (focus_searchbar || is_index) {
         let s = $('#search');
         s.focus();
         Util.setCaretPosition("search", -1);
@@ -215,8 +289,7 @@ Util.awaitDocumentReady(() => {
     $(".audioBtn").contextmenu((event) => {
         event.preventDefault();
         var url = window.location.origin + $(event.target).attr('data');
-        Util.copyToClipboard(url);
-        Util.showMessage("success", "Audio URL copied to clipboard");
+        JotoTools.copyTextAndEcho(url, "QOL_AUDIO_COPIED");
     });
 
     // Disables the dropdown's animation until the first onclick event
@@ -235,9 +308,15 @@ Util.awaitDocumentReady(() => {
     }
 
     // Change URL to contain the language code
-    let txt = input.value; 
-    let type = $('#search-type').val();
-    let lang = Cookies.get("default_lang");
+    if (Util.isInPath("search")) {
+        let currentParams = new URLSearchParams(document.location.search);
 
-    history.replaceState({}, 'Jotoba', JotoTools.createUrl(txt, type, 0, lang));
+        let txt = document.getElementById("search").value; 
+        let index = currentParams.get("i") || undefined;
+        let type = currentParams.get("t") || $('#search-type').val();
+        let lang = currentParams.get("l") || Cookies.get("default_lang");
+        let page = currentParams.get("p") || $(".pagination-circle.active").html();
+
+        history.replaceState({}, 'Jotoba', JotoTools.createUrl(txt, type, page || 1, lang, index));
+    }
 });

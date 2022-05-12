@@ -118,7 +118,7 @@ impl SearchEngine for Engine {
 /// Guesses the language of `query`. Returns multiple if it can't be exactly determined cause of
 /// same/similar words across multiple languages
 pub fn guess_language(query: &str) -> Vec<Language> {
-    let possible_langs = Language::word_iter()
+    let possible_langs = Language::iter_word()
         .filter(|language| {
             // Filter languages that can theoretically build valid document vectors
             Engine::gen_query_vector(index::get(*language).unwrap(), query, false, None).is_some()
@@ -196,7 +196,6 @@ mod test {
 
         resources::initialize_resources(
             config.get_storage_data_path().as_str(),
-            config.get_suggestion_sources(),
             config.get_radical_map_path().as_str(),
             config.get_sentences_path().as_str(),
         )

@@ -1,4 +1,4 @@
-FROM rust:1.56-bullseye as build
+FROM rust:1.58.1-bullseye as build
 
 WORKDIR app
 
@@ -14,7 +14,7 @@ COPY ./LICENSE ./
 RUN apt clean
 RUN apt-get update --allow-releaseinfo-change -y
 RUN apt upgrade -y
-RUN apt install build-essential pkg-config libssl-dev libleptonica-dev libtesseract-dev clang tesseract-ocr-jpn -y
+RUN apt install build-essential cmake pkg-config libssl-dev libleptonica-dev libtesseract-dev clang tesseract-ocr-jpn -y
 
 # Build your program for release
 RUN cargo build --release
@@ -27,7 +27,7 @@ WORKDIR app
 
 RUN apt-get update --allow-releaseinfo-change -y
 RUN apt upgrade -y
-RUN apt install build-essential pkg-config libssl-dev libleptonica-dev libtesseract-dev clang tesseract-ocr-jpn -y
+RUN apt install build-essential pkg-config cmake libssl-dev libleptonica-dev libtesseract-dev clang tesseract-ocr-jpn -y
 
 COPY --from=build /app/jotoba .
 COPY --from=build /app/locales ./locales

@@ -71,6 +71,11 @@ pub(super) async fn start() -> std::io::Result<()> {
                     .route(actixweb::get().to(frontend::search_ep::search_ep_no_js)),
             )
             .service(
+                actixweb::resource("/direct/{type}/{id}")
+                    .wrap(Compat::new(middleware::Compress::default()))
+                    .route(actixweb::get().to(frontend::direct::direct_ep)),
+            )
+            .service(
                 actixweb::resource("/about")
                     .wrap(Compat::new(middleware::Compress::default()))
                     .route(actixweb::get().to(frontend::about::about)),
@@ -97,6 +102,16 @@ pub(super) async fn start() -> std::io::Result<()> {
                     .wrap(Compat::new(Compress::default()))
                     .route("/", actixweb::get().to(docs))
                     .default_service(actix_web::Route::new().to(docs))
+                    .service(
+                        actixweb::scope("app")
+                            .route("kanji", actixweb::post().to(api::app::kanji::search))
+                            .route("names", actixweb::post().to(api::app::names::search))
+                            .route(
+                                "sentences",
+                                actixweb::post().to(api::app::sentences::search),
+                            )
+                            .route("words", actixweb::post().to(api::app::words::search)),
+                    )
                     .service(
                         actixweb::scope("search")
                             .route("words", actixweb::post().to(api::search::word::word_search))
@@ -145,7 +160,9 @@ pub(super) async fn start() -> std::io::Result<()> {
                 actixweb::scope("/assets")
                     .wrap(
                         middleware::DefaultHeaders::new()
-                            .add((CACHE_CONTROL, format!("max-age={}", ASSET_CACHE_MAX_AGE))),
+                            .add((CACHE_CONTROL, format!("max-age={}", ASSET_CACHE_MAX_AGE)))
+                            .add((ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
+                            .add((ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type")),
                     )
                     .wrap(Compat::new(Compress::default()))
                     .service(
@@ -212,7 +229,7 @@ fn prepare_data(ccf: &Config) {
 
         let cf = ccf.clone();
         s.spawn(move |_| {
-            if let Err(err) = resources::news::News::load(cf.server.get_news_folder()) {
+            if let Err(err) = resources::news::News::init(cf.server.get_news_folder()) {
                 warn!("Failed to load news: {}", err);
             }
         })
@@ -224,7 +241,7 @@ fn setup_logger() {
 }
 
 pub fn load_tokenizer() {
-    use japanese::jp_parsing::{JA_NL_PARSER, NL_PARSER_PATH};
+    use sentence_reader::{JA_NL_PARSER, NL_PARSER_PATH};
 
     if !Path::new(NL_PARSER_PATH).exists() {
         panic!("No NL dict was found! Place the following folder in he binaries root dir: ./unidic-mecab");
@@ -248,7 +265,6 @@ fn clean_img_scan_dir(config: &Config) {
 pub fn load_resources(config: &Config) {
     resources::initialize_resources(
         config.get_storage_data_path().as_str(),
-        config.get_suggestion_sources(),
         config.get_radical_map_path().as_str(),
         config.get_sentences_path().as_str(),
     )

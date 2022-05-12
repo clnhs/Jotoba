@@ -98,6 +98,9 @@ msgstr ""
 msgid "Currently listening"
 msgstr ""
 
+msgid "No"
+msgstr ""
+
 msgid "To change your language, select one of the following"
 msgstr ""
 
@@ -448,7 +451,16 @@ msgstr ""
 msgid "Use dark mode"
 msgstr ""
 
+msgid "Show kanji on load"
+msgstr ""
+
+msgid "Show kanji numbers"
+msgstr ""
+
 msgid "Default kanji animation speed"
+msgstr ""
+
+msgid "Enable Quick-Copy"
 msgstr ""
 
 msgid "Accept Cookies"
@@ -802,8 +814,8 @@ msgid "Causative"
 msgstr ""
 
 msgctxt "inflection"
-msgid "CausativePassive"
-msgstr "Causative or Passive"
+msgid "PotentialOrPassive"
+msgstr "Potential or Passive"
 
 msgctxt "inflection"
 msgid "Imperative"
@@ -811,7 +823,23 @@ msgstr ""
 
 msgctxt "inflection"
 msgid "Tai"
-msgstr ""
+msgstr "たい (Want to do something)"
+
+msgctxt "inflection"
+msgid "TeIru"
+msgstr "ている (Indicates an action that is ongoing)"
+
+msgctxt "inflection"
+msgid "TeAru"
+msgstr "てある (Indicates an action that has been done intentionally)"
+
+msgctxt "inflection"
+msgid "TeMiru"
+msgstr "てみる (Means to \"Try\" something)"
+
+msgctxt "inflection"
+msgid "Tara"
+msgstr "たら (States a condition)"
 
 msgid ", with this form:"
 msgid_plural ", with these forms:"
@@ -896,6 +924,9 @@ msgid "Download audio"
 msgstr ""
 
 msgid "Sentence search"
+msgstr ""
+
+msgid "Direct reference"
 msgstr ""
 
 # "no words found"

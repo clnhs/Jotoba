@@ -1,25 +1,16 @@
 pub mod kanji;
 pub mod name;
 pub mod sentence;
-pub mod suggestion;
 pub mod word;
 
 use intmap::IntMap;
 
 use serde::{Deserialize, Serialize};
-use types::jotoba::languages::Language;
 
 use self::{
-    kanji::KanjiRetrieve,
-    name::NameRetrieve,
-    sentence::SentenceRetrieve,
-    suggestion::{provider::SuggestionProvider, SuggestionDictionary},
-    word::WordRetrieve,
+    kanji::KanjiRetrieve, name::NameRetrieve, sentence::SentenceRetrieve, word::WordRetrieve,
 };
-use super::{
-    suggestions::{foreign_words::ForeignSuggestion, native_words::NativeSuggestion},
-    DictResources,
-};
+use super::DictResources;
 use std::collections::HashMap;
 use types::jotoba::{
     kanji::{DetailedRadical, Kanji},
@@ -29,22 +20,15 @@ use types::jotoba::{
 };
 
 pub type WordStorage = IntMap<Word>;
-type NameStorage = IntMap<Name>;
-type KanjiStorage = HashMap<char, Kanji>;
-pub(super) type RadicalStorage = HashMap<char, Vec<char>>;
-
-#[derive(Debug, Deserialize)]
-pub struct Output {
-    pub item_count: usize,
-    pub freq_map: HashMap<u32, usize>,
-    pub sense_map: HashMap<(u32, u8), usize>,
-}
+pub type NameStorage = IntMap<Name>;
+pub type KanjiStorage = HashMap<char, Kanji>;
+/// Maps radicals to all kanji using the raical
+pub type RadicalStorage = HashMap<char, Vec<char>>;
 
 /// A dictionary of words, names, kanji, and radicals. This is the main data structure for the dictionary.
 #[derive(Default)]
 pub struct ResourceStorage {
     pub dict_data: DictionaryData,
-    suggestions: Option<SuggestionData>,
 }
 
 /// Contains all core data for the dictionary. This is the data structure for the dictionary functionality to work properly.
@@ -53,7 +37,7 @@ pub struct DictionaryData {
     word_data: WordData,
     names: NameStorage,
     kanji: KanjiData,
-    rad_map: RadicalStorage,
+    rad_kanji_map: RadicalStorage,
     sentences: SentenceStorage,
     radicals: HashMap<char, DetailedRadical>,
 }
@@ -81,28 +65,21 @@ pub struct SentenceStorage {
     pub jlpt_map: HashMap<u8, Vec<u32>>,
 }
 
-/// Contains all data for the dictionary suggestions.
-#[derive(Default)]
-pub(crate) struct SuggestionData {
-    foregin: HashMap<Language, SuggestionDictionary<ForeignSuggestion>>,
-    japanese: Option<SuggestionDictionary<NativeSuggestion>>,
-}
-
 impl DictionaryData {
     #[inline]
     fn new(
-        words: WordData,
+        word_data: WordData,
         names: NameStorage,
         kanji: KanjiData,
-        rad_map: RadicalStorage,
+        rad_kanji_map: RadicalStorage,
         sentences: SentenceStorage,
         radicals: HashMap<char, DetailedRadical>,
     ) -> Self {
         Self {
-            word_data: words,
+            word_data,
             names,
             kanji,
-            rad_map,
+            rad_kanji_map,
             sentences,
             radicals,
         }
@@ -114,38 +91,12 @@ impl DictionaryData {
     }
 }
 
-impl SuggestionData {
-    #[inline]
-    pub(super) fn new() -> Self {
-        Self::default()
-    }
-
-    /// Returns false if there aren't suggestionts at all
-    #[inline]
-    pub(super) fn is_empty(&self) -> bool {
-        self.japanese.is_none() && self.foregin.is_empty()
-    }
-
-    pub(super) fn add_foreign(
-        &mut self,
-        lang: Language,
-        dict: SuggestionDictionary<ForeignSuggestion>,
-    ) {
-        self.foregin.insert(lang, dict);
-    }
-
-    pub(super) fn add_jp(&mut self, dict: SuggestionDictionary<NativeSuggestion>) {
-        self.japanese = Some(dict);
-    }
-}
-
 impl ResourceStorage {
     /// Create a new `ResourceStorage` by `Resources`
     #[inline]
     pub(super) fn new(
         resources: DictResources,
-        suggestions: Option<SuggestionData>,
-        rad_map: RadicalStorage,
+        rad_kanji_map: RadicalStorage,
         sentences: SentenceStorage,
     ) -> Self {
         let words = build_words(resources.words);
@@ -157,7 +108,6 @@ impl ResourceStorage {
             words,
             jlpt_word_map: resources.word_jlpt,
             irregular_ichidan: resources.irregular_iru_eru,
-            // genki_levels: HashMap::new(),
         };
 
         let kanji_data = KanjiData {
@@ -166,13 +116,16 @@ impl ResourceStorage {
             jlpt_data: resources.kanji_jlpt,
         };
 
-        let dict_data =
-            DictionaryData::new(word_data, names, kanji_data, rad_map, sentences, radicals);
+        let dict_data = DictionaryData::new(
+            word_data,
+            names,
+            kanji_data,
+            rad_kanji_map,
+            sentences,
+            radicals,
+        );
 
-        Self {
-            dict_data,
-            suggestions,
-        }
+        Self { dict_data }
     }
 
     /// Returns a `WordRetrieve` which can be used to retrieve words from the `ResourceStorage`
@@ -182,31 +135,29 @@ impl ResourceStorage {
     }
 
     /// Returns an iterator over all words with given `jlpt` level
-    pub fn word_jlpt(&self, jlpt: u8) -> Option<impl Iterator<Item = &'_ Word>> {
+    pub fn word_jlpt(&self, jlpt: u8) -> impl Iterator<Item = &'_ Word> {
         let word = self.words();
 
-        Some(
-            self.dict_data
-                .word_data
-                .jlpt_word_map
-                .get(&jlpt)?
-                .iter()
-                .filter_map(move |i| word.by_sequence(*i)),
-        )
+        self.dict_data
+            .word_data
+            .jlpt_word_map
+            .get(&jlpt)
+            .into_iter()
+            .flatten()
+            .filter_map(move |i| word.by_sequence(*i))
     }
 
     /// Returns an iterator over all sentences with given `jlpt` level
-    pub fn sentence_jlpt(&self, jlpt: u8) -> Option<impl Iterator<Item = &'_ Sentence>> {
+    pub fn sentence_jlpt(&self, jlpt: u8) -> impl Iterator<Item = &'_ Sentence> {
         let sentences = self.sentences();
 
-        Some(
-            self.dict_data
-                .sentences
-                .jlpt_map
-                .get(&jlpt)?
-                .iter()
-                .filter_map(move |i| sentences.by_id(*i)),
-        )
+        self.dict_data
+            .sentences
+            .jlpt_map
+            .get(&jlpt)
+            .into_iter()
+            .flatten()
+            .filter_map(move |i| sentences.by_id(*i))
     }
 
     /// Returns the amount of sentences with given jlpt level
@@ -221,7 +172,7 @@ impl ResourceStorage {
 
     /// Returns a `WordRetrieve` which can be used to retrieve names from the `ResourceStorage`
     #[inline]
-    pub fn names(&self) -> NameRetrieve<'_> {
+    pub fn names(&'static self) -> NameRetrieve<'static> {
         NameRetrieve::new(self)
     }
 
@@ -231,12 +182,6 @@ impl ResourceStorage {
         KanjiRetrieve::new(self)
     }
 
-    /// Returns a `SuggestionProvider` which can be used to retrieve suggestions from the `ResourceStorage`
-    #[inline]
-    pub fn suggestions(&self) -> SuggestionProvider<'_> {
-        SuggestionProvider::new(self)
-    }
-
     /// Returns a `SentenceRetrieve` which can be used to retrieve sentences from the `ResourceStorage`
     #[inline]
     pub fn sentences(&self) -> SentenceRetrieve<'_> {
@@ -244,22 +189,18 @@ impl ResourceStorage {
     }
 }
 
-#[inline]
 pub fn build_words(words: Vec<Word>) -> WordStorage {
     words.into_iter().map(|i| (i.sequence as u64, i)).collect()
 }
 
-#[inline]
-fn build_names(names: Vec<Name>) -> NameStorage {
+pub fn build_names(names: Vec<Name>) -> NameStorage {
     names.into_iter().map(|i| (i.sequence as u64, i)).collect()
 }
 
-#[inline]
-fn build_kanji(kanji: Vec<Kanji>) -> KanjiStorage {
+pub fn build_kanji(kanji: Vec<Kanji>) -> KanjiStorage {
     kanji.into_iter().map(|i| (i.literal, i)).collect()
 }
 
-#[inline]
-fn build_radicals(radicals: Vec<DetailedRadical>) -> HashMap<char, DetailedRadical> {
+pub fn build_radicals(radicals: Vec<DetailedRadical>) -> HashMap<char, DetailedRadical> {
     radicals.into_iter().map(|i| (i.literal, i)).collect()
 }

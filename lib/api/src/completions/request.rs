@@ -11,7 +11,7 @@ use types::jotoba::languages::Language;
 use utils::real_string_len;
 
 /// Adjust the query and returns a newly allocated one
-pub(crate) fn adjust(request: &Request) -> Request {
+pub(crate) fn adjust(request: Request) -> Request {
     let mut query_str = request.input.as_str();
     let query_len = real_string_len(&request.input);
 
@@ -36,19 +36,20 @@ pub(crate) fn adjust(request: &Request) -> Request {
 
     Request {
         input: query_str.to_owned(),
-        lang: request.lang.to_owned(),
+        lang: request.lang,
         search_type: request.search_type,
+        radicals: request.radicals,
     }
 }
 
 /// Returns a `Query` based on the `Request`
-pub(crate) fn get_query(request: &Request) -> Result<Query, RestError> {
+pub(crate) fn get_query(request: Request) -> Result<(Query, Vec<char>), RestError> {
     let query_str = request.input.trim_start().to_string();
 
     let search_type = request.search_type;
 
     let settings = UserSettings {
-        user_lang: get_language(request),
+        user_lang: get_language(&request),
         ..UserSettings::default()
     };
 
@@ -57,7 +58,7 @@ pub(crate) fn get_query(request: &Request) -> Result<Query, RestError> {
         .parse()
         .ok_or(RestError::BadRequest)?;
 
-    Ok(query)
+    Ok((query, request.radicals))
 }
 
 /// Returns the user configured language of the [`Request`]

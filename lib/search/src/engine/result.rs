@@ -1,3 +1,4 @@
+use super::result_item::ResultItem;
 use std::{
     cmp::min,
     collections::{BinaryHeap, HashSet},
@@ -6,8 +7,6 @@ use std::{
     ops::Index,
     vec::IntoIter,
 };
-
-use super::result_item::ResultItem;
 
 /// A result from a search. Contains information about the actual amount of items returned and the
 /// limited items to display
@@ -103,6 +102,12 @@ impl<T: PartialEq + Hash + Clone + Eq> SearchResult<T> {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Returns an iterator over the raw result items
+    #[inline]
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T> + 'a {
+        self.items.iter().map(|i| &i.item)
     }
 
     /// Returns an iterator over the raw result items
